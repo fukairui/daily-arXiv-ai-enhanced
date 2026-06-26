@@ -790,12 +790,27 @@ main {
   font-size: 14px;
   color: var(--text-secondary);
   line-height: 1.6;
-  overflow: visible;
+  height: 140px;
+  overflow-y: auto;
   margin-bottom: 20px;
   border-left: 2px solid var(--border-accent);
   background-color: var(--brand-soft);
   padding: 12px 14px;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  /* 细滚动条 */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-accent) transparent;
+}
+
+.paper-card-summary::-webkit-scrollbar {
+  width: 6px;
+}
+.paper-card-summary::-webkit-scrollbar-thumb {
+  background-color: var(--border-accent);
+  border-radius: 3px;
+}
+.paper-card-summary::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .paper-card-footer {
