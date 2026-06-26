@@ -4,33 +4,43 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Access Verification - daily-arXiv-ai-enhanced</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Spectral:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">
     <style>
         /* Clean login page styling */
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
             margin: 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-color: #f7f4ee;
+            background-image: radial-gradient(circle at 1px 1px, rgba(26, 24, 20, 0.04) 1px, transparent 0);
+            background-size: 22px 22px;
+            color: #1a1814;
         }
         .login-container {
-            background: white;
+            background: #fffdf8;
             padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            border-radius: 6px;
+            border: 1px solid #e6ddcb;
+            border-top: 3px solid #b31b1b;
+            box-shadow: 0 14px 36px rgba(26, 24, 20, 0.14);
             width: 90%;
             max-width: 400px;
         }
         h1 {
             margin: 0 0 30px;
-            color: #333;
+            color: #1a1814;
             text-align: center;
+            font-family: 'Spectral', Georgia, serif;
+            font-weight: 700;
         }
         .subtitle {
             text-align: center;
-            color: #666;
+            color: #5c554a;
             margin-bottom: 30px;
             font-size: 14px;
         }
@@ -40,49 +50,53 @@
         label {
             display: block;
             margin-bottom: 8px;
-            color: #555;
+            color: #5c554a;
             font-weight: 500;
         }
         input[type="password"] {
             width: 100%;
             padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 6px;
+            border: 1px solid #e6ddcb;
+            border-radius: 4px;
             font-size: 16px;
             box-sizing: border-box;
             transition: border-color 0.3s;
+            background: #fffdf8;
+            color: #1a1814;
         }
         input[type="password"]:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: #b31b1b;
         }
         button {
             width: 100%;
             padding: 12px;
-            background: #667eea;
-            color: white;
+            background: #b31b1b;
+            color: #fffdf8;
             border: none;
-            border-radius: 6px;
-            font-size: 16px;
-            font-weight: 600;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', ui-monospace, monospace;
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
             cursor: pointer;
             transition: background 0.3s;
         }
         button:hover {
-            background: #5568d3;
+            background: #8a1414;
         }
         button:active {
             transform: translateY(1px);
         }
         .error-message {
-            color: #e74c3c;
+            color: #b31b1b;
             margin-top: 10px;
             text-align: center;
             font-size: 14px;
             display: none;
             padding: 10px;
-            background: #fee;
-            border-radius: 6px;
+            background: rgba(179, 27, 27, 0.08);
+            border-radius: 4px;
             animation: shake 0.5s;
         }
         @keyframes shake {
@@ -100,6 +114,7 @@
         .remember-me input[type="checkbox"] {
             width: auto;
             cursor: pointer;
+            accent-color: #b31b1b;
         }
         .remember-me label {
             margin: 0;
@@ -109,8 +124,9 @@
         .footer {
             margin-top: 20px;
             text-align: center;
-            font-size: 12px;
-            color: #999;
+            font-family: 'JetBrains Mono', ui-monospace, monospace;
+            font-size: 11px;
+            color: #9a9182;
         }
         /* Site logo styles */
         .site-logo {
@@ -131,12 +147,10 @@
             width: auto;
         }
         .site-title {
-            font-size: 18px;
-            font-weight: 600;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            font-family: 'Spectral', Georgia, serif;
+            font-size: 19px;
+            font-weight: 700;
+            color: #1a1814;
         }
     </style>
 </head>
