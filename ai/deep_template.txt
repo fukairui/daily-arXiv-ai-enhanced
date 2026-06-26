@@ -22,7 +22,7 @@ Requirements:
 Output format:
 Return ONLY a valid JSON object. Do NOT wrap it in markdown fences. Do NOT add explanations before or after the JSON.
 The JSON object MUST have exactly these keys and compatible value types:
-{
+{{
   "background": "string",
   "problem": "string",
   "motivation": "string",
@@ -36,5 +36,5 @@ The JSON object MUST have exactly these keys and compatible value types:
   "future_work": ["string"],
   "related_comparison": "string",
   "tags": ["Existing Tag Name"],
-  "new_tags": [{"name": "New Tag Name", "desc": "one sentence description"}]
-}
+  "new_tags": [{{"name": "New Tag Name", "desc": "one sentence description"}}]
+}}
