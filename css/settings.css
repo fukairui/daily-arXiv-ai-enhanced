@@ -391,3 +391,61 @@
     width: 100%;
   }
 } 
+/* 深度分析设置区块 */
+.settings-desc {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.pat-warning {
+  background: rgba(164, 44, 37, 0.06);
+  border: 1px solid rgba(164, 44, 37, 0.2);
+  border-radius: var(--radius-sm, 8px);
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-color);
+  margin-bottom: 16px;
+}
+
+.pat-warning code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+
+.pat-warning a {
+  color: #a42c25;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.pat-warning a:hover {
+  text-decoration: underline;
+}
+
+.settings-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text-color);
+}
+
+.pat-status {
+  margin-top: 10px;
+  font-size: 13px;
+  min-height: 18px;
+}
+
+.pat-status.success {
+  color: #15803d;
+}
+
+.pat-status.error {
+  color: #b91c1c;
+}

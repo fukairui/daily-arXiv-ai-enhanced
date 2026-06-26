@@ -1,0 +1,151 @@
+name: deep-analyze
+
+# 由前端通过 repository_dispatch 触发：对单篇收藏论文做 PDF 全文深度分析，
+# 结果写回 data 分支的 data/deep/{id}.json，并更新 favorites.jsonl / tags_pending.json。
+on:
+  repository_dispatch:
+    types: [deep-analyze]
+  workflow_dispatch:
+    inputs:
+      id:
+        description: "arXiv paper id (e.g. 2606.26157)"
+        required: true
+      pdf:
+        description: "PDF url (optional)"
+        required: false
+      title:
+        description: "paper title (optional)"
+        required: false
+      date:
+        description: "paper date YYYY-MM-DD (optional)"
+        required: false
+
+# 避免同一篇论文的并发分析互相覆盖
+concurrency:
+  group: deep-analyze-${{ github.event.client_payload.id || github.event.inputs.id }}
+  cancel-in-progress: false
+
+jobs:
+  deep-analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          uv sync
+
+      - name: Resolve inputs
+        id: inputs
+        run: |
+          PAPER_ID="${{ github.event.client_payload.id || github.event.inputs.id }}"
+          PDF="${{ github.event.client_payload.pdf || github.event.inputs.pdf }}"
+          TITLE="${{ github.event.client_payload.title || github.event.inputs.title }}"
+          DATE="${{ github.event.client_payload.date || github.event.inputs.date }}"
+          AFFIL="${{ github.event.client_payload.affiliations }}"
+          if [ -z "$PAPER_ID" ]; then
+            echo "缺少 paper id / Missing paper id"
+            exit 1
+          fi
+          echo "paper_id=$PAPER_ID" >> $GITHUB_OUTPUT
+          echo "pdf=$PDF" >> $GITHUB_OUTPUT
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
+          echo "date=$DATE" >> $GITHUB_OUTPUT
+          echo "affiliations=$AFFIL" >> $GITHUB_OUTPUT
+
+      - name: Fetch known tags from data branch
+        run: |
+          mkdir -p /tmp/known
+          # 从 data 分支拉取已有的 tags.json（不存在则置空库）
+          if curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/data/data/tags.json" -o /tmp/known/tags.json; then
+            echo "已获取 tags.json / Fetched tags.json"
+          else
+            echo '{"tags": []}' > /tmp/known/tags.json
+            echo "tags.json 不存在，使用空库 / tags.json not found, using empty library"
+          fi
+
+      - name: Run deep analysis
+        run: |
+          source .venv/bin/activate
+          mkdir -p data/deep
+          cd ai
+          export OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          export OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }}
+          export LANGUAGE="${{ vars.LANGUAGE }}"
+          export DEEP_MODEL_NAME="${{ vars.DEEP_MODEL_NAME }}"
+          python deep_enhance.py \
+            --id "${{ steps.inputs.outputs.paper_id }}" \
+            --pdf "${{ steps.inputs.outputs.pdf }}" \
+            --title "${{ steps.inputs.outputs.title }}" \
+            --affiliations "${{ steps.inputs.outputs.affiliations }}" \
+            --date "${{ steps.inputs.outputs.date }}" \
+            --known-tags /tmp/known/tags.json \
+            --data-dir ../data
+
+      - name: Prepare deep-analysis files
+        run: |
+          mkdir -p /tmp/deep_files/data/deep
+          cp -r data/deep/* /tmp/deep_files/data/deep/ 2>/dev/null || true
+          cp data/favorites.jsonl /tmp/deep_files/data/ 2>/dev/null || true
+          cp data/tags_pending.json /tmp/deep_files/data/ 2>/dev/null || true
+
+      - name: Commit results to data branch
+        run: |
+          git config --global user.email "${{ vars.EMAIL }}"
+          git config --global user.name "${{ vars.NAME }}"
+
+          # 清理工作目录中可能冲突的未跟踪文件（已备份到 /tmp）
+          rm -rf data/deep 2>/dev/null || true
+          rm -f data/favorites.jsonl data/tags_pending.json 2>/dev/null || true
+
+          if git ls-remote --heads origin data | grep -q data; then
+            echo "data 分支已存在 / data branch exists"
+            git fetch origin data:data
+            git checkout data
+            git pull origin data || true
+          else
+            echo "创建 data 分支 / creating data branch"
+            git checkout --orphan data
+            git rm -rf --cached . 2>/dev/null || true
+            mkdir -p data
+            echo "# Data Branch" > README.md
+            git add README.md
+            git commit -m "chore: initialize data branch"
+            git push origin data
+          fi
+
+          mkdir -p data/deep
+          cp -r /tmp/deep_files/data/deep/* data/deep/ 2>/dev/null || true
+          cp /tmp/deep_files/data/favorites.jsonl data/ 2>/dev/null || true
+          cp /tmp/deep_files/data/tags_pending.json data/ 2>/dev/null || true
+
+          git add data/deep/* 2>/dev/null || true
+          git add data/favorites.jsonl 2>/dev/null || true
+          git add data/tags_pending.json 2>/dev/null || true
+
+          if git diff --staged --quiet; then
+            echo "没有变更需要提交 / No changes to commit"
+          else
+            git commit -m "deep: analysis for ${{ steps.inputs.outputs.paper_id }}"
+          fi
+
+      - name: Push to data branch
+        run: |
+          git config pull.rebase true
+          git config rebase.autoStash true
+          for i in {1..3}; do
+            echo "推送尝试 $i / Push attempt $i"
+            if git push origin data; then
+              echo "推送成功 / Push succeeded"
+              break
+            else
+              echo "推送失败，拉取后重试 / Push failed, pulling and retrying..."
+              git pull origin data --no-edit || true
+              if [ $i -eq 3 ]; then
+                echo "3 次尝试后推送失败 / Failed after 3 attempts"
+                exit 1
+              fi
+            fi
+          done

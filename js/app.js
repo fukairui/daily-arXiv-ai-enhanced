@@ -1480,6 +1480,11 @@ function renderPapers() {
         <div class="paper-card-footer">
           <div class="footer-left">
             <span class="paper-card-date">${formatDate(paper.date)}</span>
+            <button type="button" class="favorite-star ${Favorites.has(paper.id) ? 'favorited' : ''}" title="收藏" data-fav-id="${paper.id || ''}">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="${Favorites.has(paper.id) ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+              </svg>
+            </button>
           </div>
           <span class="paper-card-link">Details</span>
         </div>
@@ -1490,6 +1495,24 @@ function renderPapers() {
       currentPaperIndex = index; // 记录当前点击的论文索引
       showPaperDetails(paper, index + 1);
     });
+
+    // 收藏按钮：阻止冒泡，避免触发详情弹窗
+    const favStar = paperCard.querySelector('.favorite-star');
+    if (favStar) {
+      favStar.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const favored = Favorites.toggle(paper.id, {
+          title: paper.title,
+          date: paper.date,
+          abs: paper.url,
+          pdf: (paper.url || '').replace('abs', 'pdf'),
+          categories: paper.allCategories || paper.category
+        });
+        favStar.classList.toggle('favorited', favored);
+        const svg = favStar.querySelector('svg');
+        if (svg) svg.setAttribute('fill', favored ? 'currentColor' : 'none');
+      });
+    }
     
     container.appendChild(paperCard);
   });
@@ -1633,6 +1656,30 @@ function showPaperDetails(paper, paperIndex) {
     paperPosition.textContent = `${currentPaperIndex + 1} / ${currentFilteredPapers.length}`;
   }
   
+  // --- 收藏按钮逻辑 ---
+  const favoriteButton = document.getElementById('favoriteButton');
+  if (favoriteButton) {
+    const syncFavBtn = () => {
+      const favored = Favorites.has(paper.id);
+      favoriteButton.classList.toggle('favorited', favored);
+      const svg = favoriteButton.querySelector('svg path');
+      if (svg) svg.setAttribute('fill', favored ? '#a42c25' : 'none');
+      favoriteButton.title = favored ? '取消收藏' : '收藏';
+    };
+    syncFavBtn();
+    favoriteButton.onclick = () => {
+      Favorites.toggle(paper.id, {
+        title: paper.title,
+        date: paper.date,
+        abs: paper.url,
+        pdf: (paper.url || '').replace('abs', 'pdf'),
+        categories: paper.allCategories || paper.category
+      });
+      syncFavBtn();
+    };
+  }
+  // ---------------------------
+
   modal.classList.add('active');
   document.body.style.overflow = 'hidden';
 }

@@ -19,6 +19,9 @@
     <script src="js/auth.js"></script>
     <!-- Data Source Configuration -->
     <script src="js/data-config.js"></script>
+    <!-- Favorites & GitHub client -->
+    <script src="js/favorites-core.js"></script>
+    <script src="js/github-client.js"></script>
     <script>
         // Check authentication on page load
         Auth.requireAuth();
@@ -98,6 +101,11 @@
                             </button>
                         </div>
                     </div>
+                    <a href="favorites.html" class="icon-button" title="Favorites">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" fill="currentColor"/>
+                        </svg>
+                    </a>
                     <a href="statistic.html" class="icon-button" title="Statistics">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M9 17H7V10H9V17ZM13 17H11V7H13V17ZM17 17H15V13H17V17ZM19 19H5V5H19V19.1V19ZM19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3Z" fill="currentColor"/>
@@ -205,6 +213,11 @@
                         <span id="paperPosition" class="paper-position">-</span>
                     </div>
                     <div class="paper-modal-buttons">
+                    <button id="favoriteButton" type="button" class="button icon-button" title="收藏/取消收藏">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" stroke="#a42c25" stroke-width="2" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
                     <a id="kimiChatLink" href="#" target="_blank" class="button icon-button" title="Open in KimiChat">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <text x="4" y="17" fill="#a42c25" font-family="Arial" font-weight="bold" font-size="14">AI</text>

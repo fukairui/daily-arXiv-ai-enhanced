@@ -14,6 +14,9 @@
     <!-- Authentication Scripts -->
     <script src="js/auth-config.js"></script>
     <script src="js/auth.js"></script>
+    <!-- Data source & GitHub client (for deep analysis PAT) -->
+    <script src="js/data-config.js"></script>
+    <script src="js/github-client.js"></script>
     <script>
         // Check authentication on page load
         Auth.requireAuth();
@@ -140,6 +143,37 @@
                                         <button id="addAuthor" class="add-tag-button">Add</button>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <div class="keyword-section-title">
+                            <div class="keyword-section-title-left">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor"/>
+                                </svg>
+                                Deep Analysis (深度分析)
+                            </div>
+                        </div>
+                        <div class="settings-card">
+                            <div class="settings-item">
+                                <p class="settings-desc">
+                                    收藏的论文可触发"深度分析"：后端将下载 PDF 全文并用更强模型生成论文精读级解读与研究方向标签。
+                                    此功能通过 GitHub Actions 在你的仓库运行，需要一个个人访问令牌 (PAT) 来触发。
+                                </p>
+                                <div class="pat-warning">
+                                    ⚠️ 请使用 <strong>Fine-grained PAT</strong>，仅授权本仓库的
+                                    <code>Contents: Read and write</code> 权限，并建议设置较短有效期。
+                                    令牌仅保存在你本机浏览器的 localStorage，<strong>不会上传仓库</strong>；如有泄露可随时在 GitHub 吊销。
+                                    <a href="https://github.com/settings/tokens?type=beta" target="_blank">前往创建 PAT →</a>
+                                </div>
+                                <label class="settings-label" for="githubPatInput">GitHub Personal Access Token</label>
+                                <div class="tag-input-container">
+                                    <input type="password" id="githubPatInput" class="settings-input" placeholder="github_pat_...">
+                                    <button id="testPat" class="add-tag-button">测试连通性</button>
+                                </div>
+                                <p id="patStatus" class="pat-status"></p>
                             </div>
                         </div>
                     </div>

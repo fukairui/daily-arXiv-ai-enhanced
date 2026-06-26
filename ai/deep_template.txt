@@ -1,0 +1,20 @@
+Please produce an in-depth analysis of the following paper.
+
+Title:
+{title}
+
+Author affiliations (may be empty):
+{affiliations}
+
+Known research-direction tags (the existing tag library, name: description):
+{known_tags}
+
+Full text of the paper (may be truncated):
+---
+{full_text}
+---
+
+Requirements:
+1. Fill every analysis field thoroughly and technically, based on the FULL TEXT (not just the abstract). Each prose field should be a detailed paragraph; list fields (innovations/limitations/future_work) should contain concrete bullet points.
+2. tags: choose the 1-3 MOST relevant tags from the known tag library above. The tag names you output here MUST exactly match existing tag names. If none of the known tags fit, leave tags empty.
+3. new_tags: ONLY if this paper clearly belongs to a brand-new research direction that none of the known tags can cover, propose new tag(s) here with a one-sentence description. Otherwise return an empty list. Never duplicate an existing tag in new_tags. Prefer reusing existing tags over creating new ones.

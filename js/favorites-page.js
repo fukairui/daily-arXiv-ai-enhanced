@@ -1,0 +1,394 @@
+/**
+ * Favorites Page
+ * 收藏夹页面逻辑：
+ *  - 合并本地收藏与 data 分支 favorites.jsonl（跨设备恢复）
+ *  - 按研究方向 TAG 分组/筛选
+ *  - 展示每篇的深度分析状态，触发/重跑深度分析（repository_dispatch）
+ *  - 轮询 data/deep/{id}.json 出现后展示
+ *  - 处理 tags_pending.json：用户确认后写回 tags.json
+ */
+
+const DISPATCH_EVENT = 'deep-analyze';
+const POLL_INTERVAL_MS = 15000;   // 轮询间隔
+const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 轮询超时
+
+let activeTagFilter = null;       // 当前 TAG 筛选；null 表示全部
+let deepCache = {};               // id -> deep json
+let knownTags = [];               // tags.json 中的标签
+
+document.addEventListener('DOMContentLoaded', init);
+
+async function init() {
+    bindModal();
+    await restoreFromRemote();
+    await loadKnownTags();
+    await loadDeepForFavorites();
+    await loadPendingTags();
+    render();
+}
+
+/** 从 data 分支 favorites.jsonl 恢复收藏到本地（跨设备） */
+async function restoreFromRemote() {
+    const res = await GitHubClient.getFile('data/favorites.jsonl');
+    if (!res.exists || !res.content) return;
+    const ids = [];
+    const metaAll = Favorites.getMeta();
+    res.content.trim().split('\n').forEach(line => {
+        if (!line.trim()) return;
+        try {
+            const row = JSON.parse(line);
+            if (row.id) {
+                ids.push(row.id);
+                // 仅当本地无元数据时，用远端补全
+                if (!metaAll[row.id]) {
+                    metaAll[row.id] = {
+                        title: row.title || row.id,
+                        date: row.date || '',
+                        pdf: `https://arxiv.org/pdf/${row.id}`,
+                        abs: `https://arxiv.org/abs/${row.id}`,
+                        categories: []
+                    };
+                }
+            }
+        } catch (e) { /* ignore */ }
+    });
+    Favorites._saveMeta(metaAll);
+    Favorites.merge(ids);
+}
+
+/** 读取已确认标签库 tags.json */
+async function loadKnownTags() {
+    const res = await GitHubClient.getFile('data/tags.json');
+    if (res.exists && res.content) {
+        try {
+            const data = JSON.parse(res.content);
+            knownTags = Array.isArray(data.tags) ? data.tags : [];
+        } catch (e) { knownTags = []; }
+    }
+}
+
+/** 为所有收藏论文读取已有的深度分析（如已存在） */
+async function loadDeepForFavorites() {
+    const ids = Favorites.getIds();
+    await Promise.all(ids.map(async id => {
+        const res = await GitHubClient.getFile(`data/deep/${id}.json`);
+        if (res.exists && res.content) {
+            try { deepCache[id] = JSON.parse(res.content); } catch (e) { /* ignore */ }
+        }
+    }));
+}
+
+/** 读取待确认标签 */
+async function loadPendingTags() {
+    const res = await GitHubClient.getFile('data/tags_pending.json');
+    let pending = [];
+    if (res.exists && res.content) {
+        try { pending = (JSON.parse(res.content).pending) || []; } catch (e) { pending = []; }
+    }
+    renderPendingTags(pending, res.sha || null);
+}
+
+/* ---------------- 渲染 ---------------- */
+
+function render() {
+    renderStats();
+    renderTagFilter();
+    renderList();
+}
+
+function renderStats() {
+    const ids = Favorites.getIds();
+    const analyzed = ids.filter(id => deepCache[id]).length;
+    const el = document.getElementById('favStats');
+    el.textContent = `共 ${ids.length} 篇收藏 · 已深度分析 ${analyzed} 篇 · 待分析 ${ids.length - analyzed} 篇`;
+}
+
+/** 收集所有收藏论文出现过的 tags（来自 deep 结果） */
+function collectTags() {
+    const counter = {};
+    Favorites.getIds().forEach(id => {
+        const d = deepCache[id];
+        (d && d.tags ? d.tags : []).forEach(t => {
+            counter[t] = (counter[t] || 0) + 1;
+        });
+    });
+    return counter;
+}
+
+function renderTagFilter() {
+    const bar = document.getElementById('tagFilterBar');
+    const counter = collectTags();
+    const tags = Object.keys(counter).sort();
+    bar.innerHTML = '';
+
+    const allBtn = document.createElement('button');
+    allBtn.className = 'tag-filter-chip' + (activeTagFilter === null ? ' active' : '');
+    allBtn.textContent = `全部 (${Favorites.getIds().length})`;
+    allBtn.onclick = () => { activeTagFilter = null; render(); };
+    bar.appendChild(allBtn);
+
+    tags.forEach(t => {
+        const chip = document.createElement('button');
+        chip.className = 'tag-filter-chip' + (activeTagFilter === t ? ' active' : '');
+        chip.textContent = `${t} (${counter[t]})`;
+        chip.onclick = () => { activeTagFilter = (activeTagFilter === t ? null : t); render(); };
+        bar.appendChild(chip);
+    });
+}
+
+function escapeHtml(s) {
+    return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderList() {
+    const container = document.getElementById('favoritesList');
+    let ids = Favorites.getIds();
+
+    if (activeTagFilter) {
+        ids = ids.filter(id => deepCache[id] && (deepCache[id].tags || []).includes(activeTagFilter));
+    }
+
+    if (ids.length === 0) {
+        container.innerHTML = '<div class="loading-container"><p>还没有收藏，去主页点星收藏论文吧。</p></div>';
+        return;
+    }
+
+    const meta = Favorites.getMeta();
+    container.innerHTML = '';
+    ids.forEach(id => {
+        const m = meta[id] || { title: id, date: '', pdf: `https://arxiv.org/pdf/${id}`, abs: `https://arxiv.org/abs/${id}` };
+        const deep = deepCache[id];
+        const tagsHtml = (deep && deep.tags ? deep.tags : [])
+            .map(t => `<span class="fav-tag">${escapeHtml(t)}</span>`).join('');
+
+        const statusHtml = deep
+            ? '<span class="deep-status done">已深度分析</span>'
+            : '<span class="deep-status none">未分析</span>';
+
+        const card = document.createElement('div');
+        card.className = 'fav-card';
+        card.innerHTML = `
+            <div class="fav-card-main">
+                <h3 class="fav-card-title">${escapeHtml(m.title)}</h3>
+                <div class="fav-card-meta">
+                    <span class="fav-card-id">${escapeHtml(id)}</span>
+                    ${m.date ? `<span class="fav-card-date">${escapeHtml(m.date)}</span>` : ''}
+                    ${statusHtml}
+                </div>
+                <div class="fav-card-tags">${tagsHtml}</div>
+            </div>
+            <div class="fav-card-actions">
+                <a class="button icon-button" href="${escapeHtml(m.abs || ('https://arxiv.org/abs/' + id))}" target="_blank" title="arXiv">abs</a>
+                ${deep ? `<button class="button view-deep-btn" data-id="${escapeHtml(id)}">查看分析</button>` : ''}
+                <button class="button primary analyze-btn" data-id="${escapeHtml(id)}">${deep ? '重跑分析' : '深度分析'}</button>
+                <button class="button unfav-btn" data-id="${escapeHtml(id)}" title="取消收藏">✕</button>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+
+    container.querySelectorAll('.view-deep-btn').forEach(btn => {
+        btn.onclick = () => showDeepModal(btn.dataset.id);
+    });
+    container.querySelectorAll('.analyze-btn').forEach(btn => {
+        btn.onclick = () => triggerDeepAnalysis(btn.dataset.id, btn);
+    });
+    container.querySelectorAll('.unfav-btn').forEach(btn => {
+        btn.onclick = () => {
+            Favorites.remove(btn.dataset.id);
+            delete deepCache[btn.dataset.id];
+            render();
+        };
+    });
+}
+
+/* ---------------- 触发深度分析 ---------------- */
+
+async function triggerDeepAnalysis(id, btn) {
+    if (!GitHubClient.hasToken()) {
+        alert('请先在「设置」页配置 GitHub PAT，才能触发深度分析。');
+        window.location.href = 'settings.html';
+        return;
+    }
+    const meta = Favorites.metaOf(id) || {};
+    btn.disabled = true;
+    btn.textContent = '触发中...';
+
+    const knownNames = knownTags.map(t => t.name);
+    const res = await GitHubClient.dispatch(DISPATCH_EVENT, {
+        id: id,
+        pdf: meta.pdf || `https://arxiv.org/pdf/${id}`,
+        title: meta.title || id,
+        date: meta.date || '',
+        known_tags: knownNames,
+        language: 'Chinese'
+    });
+
+    if (!res.ok) {
+        btn.disabled = false;
+        btn.textContent = '深度分析';
+        alert(`触发失败 (${res.status}): ${res.message || '未知错误'}`);
+        return;
+    }
+
+    btn.textContent = '分析中...';
+    pollForResult(id, btn);
+}
+
+/** 轮询 data/deep/{id}.json 出现 */
+function pollForResult(id, btn) {
+    const start = Date.now();
+    const timer = setInterval(async () => {
+        if (Date.now() - start > POLL_TIMEOUT_MS) {
+            clearInterval(timer);
+            if (btn) { btn.disabled = false; btn.textContent = '重试分析'; }
+            alert('深度分析超时，请稍后在收藏夹页刷新查看，或重试。');
+            return;
+        }
+        const res = await GitHubClient.getFile(`data/deep/${id}.json`);
+        if (res.exists && res.content) {
+            try {
+                deepCache[id] = JSON.parse(res.content);
+                clearInterval(timer);
+                await loadPendingTags();
+                render();
+            } catch (e) { /* keep polling */ }
+        }
+    }, POLL_INTERVAL_MS);
+}
+
+/* ---------------- 深度分析弹窗 ---------------- */
+
+function section(title, content) {
+    if (!content) return '';
+    const body = Array.isArray(content)
+        ? '<ul>' + content.map(x => `<li>${escapeHtml(x)}</li>`).join('') + '</ul>'
+        : `<p>${escapeHtml(content)}</p>`;
+    return `<div class="paper-section"><h4>${title}</h4>${body}</div>`;
+}
+
+function showDeepModal(id) {
+    const deep = deepCache[id];
+    if (!deep) return;
+    const d = deep.deep || {};
+    document.getElementById('deepModalTitle').textContent = deep.title || id;
+
+    const tagsHtml = (deep.tags || []).map(t => `<span class="fav-tag">${escapeHtml(t)}</span>`).join('');
+    const body = `
+        <div class="paper-details">
+            <p class="deep-meta">模型: ${escapeHtml(deep.model || '')} · 分析时间: ${escapeHtml((deep.analyzed_at || '').slice(0, 10))}</p>
+            <div class="fav-card-tags">${tagsHtml}</div>
+            <div class="paper-sections">
+                ${section('领域背景', d.background)}
+                ${section('核心问题', d.problem)}
+                ${section('研究动机', d.motivation)}
+                ${section('方法总览', d.method_overview)}
+                ${section('方法细节', d.method_details)}
+                ${section('实验设置', d.experiments)}
+                ${section('结果与分析', d.results_analysis)}
+                ${section('结论', d.conclusion)}
+                ${section('创新点', d.innovations)}
+                ${section('局限性', d.limitations)}
+                ${section('未来方向', d.future_work)}
+                ${section('与相关工作对比', d.related_comparison)}
+            </div>
+        </div>
+    `;
+    document.getElementById('deepModalBody').innerHTML = body;
+    const modal = document.getElementById('deepModal');
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function bindModal() {
+    const modal = document.getElementById('deepModal');
+    const close = () => { modal.classList.remove('active'); document.body.style.overflow = ''; };
+    document.getElementById('closeDeepModal').onclick = close;
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+}
+
+/* ---------------- 待确认标签 ---------------- */
+
+function renderPendingTags(pending, sha) {
+    const box = document.getElementById('pendingTagsBox');
+    const list = document.getElementById('pendingTagsList');
+    if (!pending || pending.length === 0) {
+        box.style.display = 'none';
+        return;
+    }
+    box.style.display = '';
+    list.innerHTML = '';
+    pending.forEach((p, idx) => {
+        const row = document.createElement('div');
+        row.className = 'pending-tag-row';
+        row.innerHTML = `
+            <div class="pending-tag-info">
+                <strong>${escapeHtml(p.name)}</strong>
+                <span>${escapeHtml(p.desc || '')}</span>
+            </div>
+            <div class="pending-tag-actions">
+                <button class="button primary confirm-tag-btn" data-idx="${idx}">确认入库</button>
+                <button class="button reject-tag-btn" data-idx="${idx}">忽略</button>
+            </div>
+        `;
+        list.appendChild(row);
+    });
+
+    list.querySelectorAll('.confirm-tag-btn').forEach(btn => {
+        btn.onclick = () => resolvePendingTag(pending, parseInt(btn.dataset.idx, 10), true, btn);
+    });
+    list.querySelectorAll('.reject-tag-btn').forEach(btn => {
+        btn.onclick = () => resolvePendingTag(pending, parseInt(btn.dataset.idx, 10), false, btn);
+    });
+}
+
+/**
+ * 确认/忽略一个待定标签。
+ * 确认：合并进 tags.json；无论确认或忽略，都从 tags_pending.json 移除。
+ */
+async function resolvePendingTag(pending, idx, confirm, btn) {
+    if (!GitHubClient.hasToken()) {
+        alert('请先在「设置」页配置 GitHub PAT。');
+        return;
+    }
+    const tag = pending[idx];
+    if (!tag) return;
+    btn.disabled = true;
+    btn.textContent = '处理中...';
+
+    // 1) 确认则写入 tags.json（乐观锁合并去重）
+    if (confirm) {
+        const r1 = await GitHubClient.updateFileWithRetry('data/tags.json', (old) => {
+            let data = { tags: [] };
+            if (old) { try { data = JSON.parse(old); } catch (e) { data = { tags: [] }; } }
+            if (!Array.isArray(data.tags)) data.tags = [];
+            const exists = data.tags.some(t => (t.name || '').toLowerCase() === tag.name.toLowerCase());
+            if (!exists) data.tags.push({ name: tag.name, desc: tag.desc || '', count: 1 });
+            return JSON.stringify(data, null, 2);
+        }, `tags: confirm "${tag.name}"`);
+        if (!r1.ok) {
+            btn.disabled = false;
+            btn.textContent = '确认入库';
+            alert('写入 tags.json 失败: ' + (r1.message || ''));
+            return;
+        }
+    }
+
+    // 2) 从 tags_pending.json 移除该项（乐观锁）
+    const r2 = await GitHubClient.updateFileWithRetry('data/tags_pending.json', (old) => {
+        let data = { pending: [] };
+        if (old) { try { data = JSON.parse(old); } catch (e) { data = { pending: [] }; } }
+        data.pending = (data.pending || []).filter(p => (p.name || '').toLowerCase() !== tag.name.toLowerCase());
+        return JSON.stringify(data, null, 2);
+    }, `tags: resolve pending "${tag.name}"`);
+
+    if (!r2.ok) {
+        alert('更新 tags_pending.json 失败: ' + (r2.message || ''));
+    }
+
+    // 刷新标签库与待定列表
+    await loadKnownTags();
+    await loadPendingTags();
+    render();
+}

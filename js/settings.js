@@ -10,6 +10,16 @@ function initSettings() {
   loadKeywordPreferences();
   // 作者偏好设置
   loadAuthorPreferences();
+  // 深度分析 PAT
+  loadDeepAnalysisSettings();
+}
+
+// 加载 GitHub PAT
+function loadDeepAnalysisSettings() {
+  const patInput = document.getElementById('githubPatInput');
+  if (patInput) {
+    patInput.value = localStorage.getItem('github_pat') || '';
+  }
 }
 
 // 从localStorage加载关键词偏好
@@ -303,6 +313,40 @@ function initEventListeners() {
   // 重置设置按钮
   const resetSettingsButton = document.getElementById('resetSettings');
   resetSettingsButton.addEventListener('click', resetSettings);
+
+  // 测试 PAT 连通性按钮
+  const testPatButton = document.getElementById('testPat');
+  if (testPatButton) {
+    testPatButton.addEventListener('click', testPatConnectivity);
+  }
+}
+
+// 测试 GitHub PAT 连通性
+async function testPatConnectivity() {
+  const patInput = document.getElementById('githubPatInput');
+  const statusEl = document.getElementById('patStatus');
+  const pat = (patInput.value || '').trim();
+
+  if (!pat) {
+    statusEl.textContent = '请先输入 PAT';
+    statusEl.className = 'pat-status error';
+    return;
+  }
+
+  // 临时写入以便 GitHubClient 读取（保存动作仍由 Save 按钮完成）
+  localStorage.setItem('github_pat', pat);
+
+  statusEl.textContent = '测试中...';
+  statusEl.className = 'pat-status';
+
+  const result = await GitHubClient.testToken();
+  if (result.ok) {
+    statusEl.textContent = `✅ 连接成功（仓库 ${DATA_CONFIG.repoOwner}/${DATA_CONFIG.repoName} 可访问）`;
+    statusEl.className = 'pat-status success';
+  } else {
+    statusEl.textContent = `❌ 连接失败 (${result.status}): ${result.message || '未知错误'}`;
+    statusEl.className = 'pat-status error';
+  }
 }
 
 // 复制关键词到剪切板
@@ -396,7 +440,18 @@ function saveSettings() {
   // 保存设置到localStorage
   localStorage.setItem('preferredKeywords', JSON.stringify(keywords));
   localStorage.setItem('preferredAuthors', JSON.stringify(authors));
-  
+
+  // 保存 GitHub PAT（用于深度分析）
+  const patInput = document.getElementById('githubPatInput');
+  if (patInput) {
+    const pat = (patInput.value || '').trim();
+    if (pat) {
+      localStorage.setItem('github_pat', pat);
+    } else {
+      localStorage.removeItem('github_pat');
+    }
+  }
+
   // 显示保存成功提示，添加成功图标
   showNotification('Settings saved successfully!', 'success');
 }

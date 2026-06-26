@@ -2441,4 +2441,33 @@ footer {
 .footer-left {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+/* 卡片收藏星按钮 */
+.favorite-star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-secondary, #94a3b8);
+  transition: color 0.2s ease, transform 0.15s ease;
+  line-height: 0;
+}
+
+.favorite-star:hover {
+  color: #a42c25;
+  transform: scale(1.15);
+}
+
+.favorite-star.favorited {
+  color: #a42c25;
+}
+
+/* 详情弹窗收藏按钮激活态 */
+#favoriteButton.favorited {
+  color: #a42c25;
 }

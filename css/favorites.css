@@ -1,0 +1,231 @@
+/* 收藏夹页面样式 */
+.favorites-page {
+  padding: 24px;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.favorites-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.favorites-header {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.favorites-header h1 {
+  font-size: 30px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.favorites-stats {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+/* TAG 筛选条 */
+.tag-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-filter-chip {
+  border: 1px solid var(--border-color, #e2e8f0);
+  background: var(--card-bg, #fff);
+  color: var(--text-color);
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tag-filter-chip:hover {
+  border-color: #a42c25;
+}
+
+.tag-filter-chip.active {
+  background: #a42c25;
+  border-color: #a42c25;
+  color: #fff;
+}
+
+/* 收藏列表 */
+.favorites-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fav-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: var(--radius-md, 12px);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+}
+
+.fav-card-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.fav-card-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+
+.fav-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.fav-card-id {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.deep-status {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.deep-status.done {
+  background: rgba(21, 128, 61, 0.12);
+  color: #15803d;
+}
+
+.deep-status.none {
+  background: rgba(100, 116, 139, 0.12);
+  color: #64748b;
+}
+
+.fav-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fav-tag {
+  background: rgba(164, 44, 37, 0.08);
+  color: #a42c25;
+  border: 1px solid rgba(164, 44, 37, 0.2);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.fav-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  flex-shrink: 0;
+}
+
+.fav-card-actions .button {
+  white-space: nowrap;
+  font-size: 13px;
+  padding: 6px 12px;
+  text-align: center;
+}
+
+.unfav-btn {
+  color: #b91c1c;
+}
+
+/* 深度分析弹窗补充（复用 styles.css 的 paper-modal / paper-sections） */
+.deep-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+/* 待确认标签区 */
+.pending-tags-box {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-md, 12px);
+  padding: 16px 18px;
+}
+
+.pending-tags-box h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.pending-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.pending-tags-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pending-tag-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.pending-tag-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pending-tag-info span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.pending-tag-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pending-tag-actions .button {
+  font-size: 12px;
+  padding: 5px 10px;
+}
+
+@media (max-width: 640px) {
+  .fav-card {
+    flex-direction: column;
+  }
+  .fav-card-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
