@@ -1,44 +1,44 @@
 /* 基础样式 */
 :root {
-  /* —— Reading Room 调色板：arXiv 红 + 暖纸色 + 墨色 —— */
-  --arxiv-red: #b31b1b;          /* arXiv 标志红，唯一强调色 */
-  --arxiv-red-dark: #8a1414;
-  --arxiv-red-soft: rgba(179, 27, 27, 0.08);
-  --primary-color: #b31b1b;       /* 兼容旧引用 */
-  --secondary-color: #8a1414;     /* 兼容旧引用 */
-  --accent-color: #b31b1b;        /* 兼容旧引用 */
-  --gradient-primary: linear-gradient(135deg, #b31b1b 0%, #8a1414 100%);
-  --gradient-light: linear-gradient(135deg, #f0ebe1 0%, #f7f4ee 100%);
+  /* —— 中性专业调色板：浅灰底 + 石板墨色 + 克制靛蓝 —— */
+  --brand: #3b5bdb;              /* 克制靛蓝，唯一强调色 */
+  --brand-dark: #2f49b0;
+  --brand-soft: rgba(59, 91, 219, 0.08);
+  --primary-color: #3b5bdb;       /* 兼容旧引用 */
+  --secondary-color: #2f49b0;     /* 兼容旧引用 */
+  --accent-color: #3b5bdb;        /* 兼容旧引用 */
+  --gradient-primary: linear-gradient(135deg, #3b5bdb 0%, #2f49b0 100%);
+  --gradient-light: linear-gradient(135deg, #eef1f6 0%, #f7f8fa 100%);
 
-  --background-color: #f7f4ee;    /* 暖纸色 */
-  --background-light: #fffdf8;
-  --card-bg-color: #fffdf8;       /* 卡片：略亮于背景的纸 */
-  --background-hover: #efe9dd;
-  --paper-line: #e6ddcb;          /* 纸张分隔线 */
+  --background-color: #f7f8fa;    /* 极浅灰 */
+  --background-light: #ffffff;
+  --card-bg-color: #ffffff;
+  --background-hover: #eef1f6;
+  --paper-line: #e8ebf0;          /* 分隔线 */
 
-  --text-color: #1a1814;          /* 墨色 */
-  --text-secondary: #5c554a;
-  --text-tertiary: #9a9182;
-  --border-color: #e6ddcb;
-  --border-accent: rgba(179, 27, 27, 0.22);
+  --text-color: #1f2733;          /* 石板墨色 */
+  --text-secondary: #54606f;
+  --text-tertiary: #97a1ae;
+  --border-color: #e3e7ee;
+  --border-accent: rgba(59, 91, 219, 0.22);
 
-  --shadow-sm: 0 1px 2px rgba(26, 24, 20, 0.06);
-  --shadow-md: 0 6px 18px rgba(26, 24, 20, 0.10);
-  --shadow-lg: 0 14px 36px rgba(26, 24, 20, 0.14);
-  --radius-sm: 4px;
-  --radius-md: 6px;
+  --shadow-sm: 0 1px 2px rgba(31, 39, 51, 0.05);
+  --shadow-md: 0 4px 14px rgba(31, 39, 51, 0.09);
+  --shadow-lg: 0 12px 30px rgba(31, 39, 51, 0.12);
+  --radius-sm: 8px;
+  --radius-md: 12px;
   --transition: all 0.2s ease;
-  --match-highlight: rgba(255, 223, 77, 0.30);
+  --match-highlight: rgba(255, 223, 77, 0.28);
   --gold-color: #c79a3b;
   --gold-dark: #a07e2c;
   --gold-gradient: linear-gradient(135deg, #c79a3b 0%, #a07e2c 100%);
-  --author-color: #2f6b54;
-  --author-gradient: linear-gradient(135deg, #2f6b54 0%, #245443 100%);
-  --keyword-color: #8a1414;
-  --keyword-gradient: linear-gradient(135deg, #b31b1b 0%, #8a1414 100%);
+  --author-color: #0f766e;
+  --author-gradient: linear-gradient(135deg, #0f766e 0%, #0c5d57 100%);
+  --keyword-color: #3b5bdb;
+  --keyword-gradient: linear-gradient(135deg, #3b5bdb 0%, #2f49b0 100%);
 
-  /* 字体角色：衬线=标题 / Inter=UI正文 / 等宽=数据 */
-  --font-serif: 'Spectral', Georgia, 'Times New Roman', serif;
+  /* 字体角色：全程无衬线，等宽仅用于 arXiv ID 等数据 */
+  --font-serif: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 }
@@ -52,9 +52,6 @@
 body {
   font-family: var(--font-sans);
   background-color: var(--background-color);
-  background-image:
-    radial-gradient(circle at 1px 1px, rgba(26, 24, 20, 0.025) 1px, transparent 0);
-  background-size: 22px 22px;
   color: var(--text-color);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -117,7 +114,7 @@ button {
 }
 
 .icon-button:hover {
-  background-color: rgba(179, 27, 27, 0.1);
+  background-color: rgba(59, 91, 219, 0.1);
 }
 
 /* 视图控制按钮样式 */
@@ -138,17 +135,17 @@ button {
 
 .view-controls .button {
   border: 1px solid var(--border-accent);
-  background-color: rgba(179, 27, 27, 0.05);
+  background-color: rgba(59, 91, 219, 0.05);
   padding: 4px 10px;
   font-size: 13px;
 }
 
 .view-controls .button:hover {
-  background-color: rgba(179, 27, 27, 0.1);
+  background-color: rgba(59, 91, 219, 0.1);
 }
 
 .view-controls .button.active {
-  background-color: rgba(179, 27, 27, 0.15);
+  background-color: rgba(59, 91, 219, 0.15);
   border-color: var(--primary-color);
   color: var(--primary-color);
   font-weight: 500;
@@ -276,7 +273,7 @@ header {
   display: flex;
   align-items: center;
   gap: 4px;
-  background-color: var(--arxiv-red-soft);
+  background-color: var(--brand-soft);
   border-radius: var(--radius-sm);
   padding: 3px 7px;
   font-family: var(--font-mono);
@@ -348,14 +345,14 @@ header {
 }
 
 .category-nav-label, .filter-nav-label {
-  font-family: var(--font-mono);
-  font-weight: 700;
-  color: var(--arxiv-red);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: var(--text-tertiary);
   -webkit-text-fill-color: currentColor;
   margin-right: 8px; /* 减少右侧间距 */
   white-space: nowrap;
   min-width: 90px; /* 减少宽度从120px到90px */
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
   font-size: 12px; /* 减小字体大小 */
   text-transform: uppercase;
   opacity: 1; /* 增加不透明度 */
@@ -497,7 +494,7 @@ header {
   margin-left: 6px;
   min-width: 18px;
   height: 18px;
-  background-color: var(--arxiv-red-soft);
+  background-color: var(--brand-soft);
   border-radius: var(--radius-sm);
   font-size: 11px;
   padding: 0 5px;
@@ -505,21 +502,21 @@ header {
 }
 
 .category-button:hover {
-  background-color: var(--arxiv-red-soft);
+  background-color: var(--brand-soft);
   border-color: var(--border-accent);
   color: var(--text-color);
 }
 
 .keyword-tag:hover {
-  background-color: var(--arxiv-red-soft);
+  background-color: var(--brand-soft);
   border-color: var(--border-accent);
   color: var(--text-color);
 }
 
 .category-button.active {
-  background: var(--arxiv-red);
+  background: var(--brand);
   color: var(--background-light);
-  border-color: var(--arxiv-red);
+  border-color: var(--brand);
 }
 .category-button.active .category-count {
   background-color: rgba(255, 255, 255, 0.22);
@@ -527,21 +524,21 @@ header {
 
 /* 作者按钮样式 */
 .author-button {
-  background-color: rgba(179, 27, 27, 0.08); /* primary tint */
+  background-color: rgba(59, 91, 219, 0.08); /* primary tint */
   color: var(--primary-color);
-  border: 1px solid rgba(179, 27, 27, 0.25);
+  border: 1px solid rgba(59, 91, 219, 0.25);
 }
 
 .author-button:hover {
-  background-color: rgba(179, 27, 27, 0.12);
-  border-color: rgba(179, 27, 27, 0.35);
+  background-color: rgba(59, 91, 219, 0.12);
+  border-color: rgba(59, 91, 219, 0.35);
 }
 
 .author-button.active {
   background: var(--gradient-primary);
   color: white;
   border-color: var(--primary-color);
-  box-shadow: 0 2px 8px rgba(179, 27, 27, 0.25);
+  box-shadow: 0 2px 8px rgba(59, 91, 219, 0.25);
 }
 
 /* 关键词按钮样式 */
@@ -599,15 +596,15 @@ header {
 @keyframes tagHighlight {
   0% {
     transform: scale(1);
-    box-shadow: 0 0 0 rgba(179, 27, 27, 0.4);
+    box-shadow: 0 0 0 rgba(59, 91, 219, 0.4);
   }
   50% {
     transform: scale(1.05);
-    box-shadow: 0 0 8px rgba(179, 27, 27, 0.6);
+    box-shadow: 0 0 8px rgba(59, 91, 219, 0.6);
   }
   100% {
     transform: scale(1);
-    box-shadow: 0 0 0 rgba(179, 27, 27, 0.4);
+    box-shadow: 0 0 0 rgba(59, 91, 219, 0.4);
   }
 }
 
@@ -641,7 +638,6 @@ main {
   background-color: var(--card-bg-color);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
-  border-left: 3px solid var(--arxiv-red);
   box-shadow: var(--shadow-sm);
   overflow: visible;
   transition: var(--transition);
@@ -656,7 +652,7 @@ main {
 .paper-card:hover {
   box-shadow: var(--shadow-md);
   transform: translateY(-3px);
-  border-left-color: var(--arxiv-red-dark);
+  border-color: var(--border-accent);
 }
 
 .paper-card-header {
@@ -665,12 +661,12 @@ main {
 }
 
 .paper-card-title {
-  font-family: var(--font-serif);
-  font-size: 17px;
+  font-family: var(--font-sans);
+  font-size: 16px;
   font-weight: 600;
   margin-bottom: 12px;
-  line-height: 1.4;
-  letter-spacing: -0.005em;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
   overflow: visible;
 }
 
@@ -755,13 +751,13 @@ main {
   white-space: nowrap;
 }
 .ai-attr-btn:hover {
-  background-color: var(--arxiv-red-soft);
+  background-color: var(--brand-soft);
   border-color: var(--border-accent);
 }
 .ai-attr-btn.active {
-  background-color: var(--arxiv-red);
+  background-color: var(--brand);
   color: var(--background-light);
-  border-color: var(--arxiv-red);
+  border-color: var(--brand);
 }
 
 .paper-card-body {
@@ -778,7 +774,7 @@ main {
   overflow: visible;
   margin-bottom: 20px;
   border-left: 2px solid var(--border-accent);
-  background-color: var(--arxiv-red-soft);
+  background-color: var(--brand-soft);
   padding: 12px 14px;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
@@ -800,7 +796,7 @@ main {
 .paper-card-link {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--arxiv-red);
+  color: var(--brand);
   font-weight: 500;
   letter-spacing: 0.02em;
 }
@@ -1175,7 +1171,7 @@ main {
 
 .flatpickr-day.today {
   border: none !important;
-  background-color: rgba(179, 27, 27, 0.1) !important;
+  background-color: rgba(59, 91, 219, 0.1) !important;
   color: var(--primary-color) !important;
   font-weight: 600 !important;
 }
@@ -1211,7 +1207,7 @@ main {
 .flatpickr-day.today.inRange, 
 .flatpickr-day.prevMonthDay.today.inRange, 
 .flatpickr-day.nextMonthDay.today.inRange {
-  background: rgba(179, 27, 27, 0.15) !important;
+  background: rgba(59, 91, 219, 0.15) !important;
   border-color: transparent !important;
   color: var(--text-color) !important;
   box-shadow: none !important;
@@ -1294,7 +1290,7 @@ input:checked + .toggle-slider {
 }
 
 input:focus + .toggle-slider {
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 2px rgba(179, 27, 27, 0.2);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 2px rgba(59, 91, 219, 0.2);
 }
 
 input:checked + .toggle-slider:before {
@@ -1453,7 +1449,7 @@ footer {
   font-family: var(--font-mono);
   font-weight: 700;
   color: var(--background-light);
-  background: var(--arxiv-red);
+  background: var(--brand);
   min-width: 30px;
   height: 24px;
   padding: 0 6px;
@@ -1478,7 +1474,7 @@ footer {
 }
 
 .paper-section {
-  background-color: var(--arxiv-red-soft);
+  background-color: var(--brand-soft);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   padding: 16px;
   border-left: 2px solid var(--border-accent);
@@ -1488,14 +1484,13 @@ footer {
   margin-top: 0;
   margin-bottom: 8px;
   font-family: var(--font-serif);
-  color: var(--arxiv-red);
+  color: var(--brand);
   font-size: 16px;
   font-weight: 600;
 }
 
 .original-abstract {
-  font-family: var(--font-serif);
-  font-style: italic;
+  font-family: var(--font-sans);
   border-left: 2px solid var(--border-color);
   padding-left: 16px;
   color: var(--text-secondary);
@@ -1620,7 +1615,7 @@ footer {
 .settings-input:focus {
   border-color: var(--primary-color);
   outline: none;
-  box-shadow: 0 0 0 2px rgba(179, 27, 27, 0.2);
+  box-shadow: 0 0 0 2px rgba(59, 91, 219, 0.2);
 }
 
 .settings-modal-footer {
@@ -1648,7 +1643,7 @@ footer {
 .selected-tags .category-tag {
   display: inline-flex;
   align-items: center;
-  background-color: rgba(179, 27, 27, 0.1);
+  background-color: rgba(59, 91, 219, 0.1);
   color: var(--primary-color);
   border-radius: 16px;
   padding: 4px 12px;
@@ -1659,7 +1654,7 @@ footer {
 }
 
 .selected-tags .category-tag:hover {
-  background-color: rgba(179, 27, 27, 0.2);
+  background-color: rgba(59, 91, 219, 0.2);
 }
 
 .range-selector {
@@ -1864,13 +1859,13 @@ footer {
 /* 添加一个高亮动画效果 */
 @keyframes highlightPulse {
   0% {
-    box-shadow: 0 0 0 1px rgba(179, 27, 27, 0.3);
+    box-shadow: 0 0 0 1px rgba(59, 91, 219, 0.3);
   }
   50% {
-    box-shadow: 0 0 0 2px rgba(179, 27, 27, 0.5);
+    box-shadow: 0 0 0 2px rgba(59, 91, 219, 0.5);
   }
   100% {
-    box-shadow: 0 0 0 1px rgba(179, 27, 27, 0.3);
+    box-shadow: 0 0 0 1px rgba(59, 91, 219, 0.3);
   }
 }
 
@@ -2160,7 +2155,7 @@ footer {
   align-items: center;
   justify-content: center;
   font-size: 14px;
-  box-shadow: 0 2px 4px rgba(179, 27, 27, 0.2);
+  box-shadow: 0 2px 4px rgba(59, 91, 219, 0.2);
   position: absolute;
   top: -12px;
   left: -12px;
@@ -2325,7 +2320,7 @@ footer {
 
 .back-to-top:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 30px rgba(179, 27, 27, 0.2);
+  box-shadow: 0 12px 30px rgba(59, 91, 219, 0.2);
   background: var(--gradient-light);
 }
 
