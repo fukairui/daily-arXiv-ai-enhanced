@@ -9,11 +9,6 @@
       "name": "Industrial Recommender Systems",
       "desc": "针对大规模生产环境下的推荐系统设计与优化方法。",
       "from_id": "2606.27058"
-    },
-    {
-      "name": "Unified Feature and Task Modeling",
-      "desc": "同时建模特征空间和任务空间的交互与缩放，实现多目标联合优化。",
-      "from_id": "2606.27058"
     }
   ]
 }
