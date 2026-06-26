@@ -63,6 +63,9 @@ if __name__ == "__main__":
                         method=ai_data.get('method', ''),
                         result=ai_data.get('result', ''),
                         conclusion=ai_data.get('conclusion', ''),
+                        is_ab_test=ai_data.get('is_ab_test', False),
+                        is_industrial_paper=ai_data.get('is_industrial_paper', False),
+                        affiliation_type=ai_data.get('affiliation_type', 'unknown'),
                         cate=item['categories'][0],
                         idx=next(idx)
                     )

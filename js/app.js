@@ -18,6 +18,8 @@ let currentFilteredPapers = []; // 当前过滤后的论文列表
 let textSearchQuery = ''; // 实时文本搜索查询
 let previousActiveKeywords = null; // 文本搜索激活时，暂存之前的关键词激活集合
 let previousActiveAuthors = null; // 文本搜索激活时，暂存之前的作者激活集合
+let filterIndustryActive = false; // 是否只看工业界论文
+let filterAbTestActive = false; // 是否只看AB实验论文
 
 // 加载用户的关键词设置
 function loadUserKeywords() {
@@ -414,6 +416,24 @@ function initEventListeners() {
     e.stopPropagation();
     toggleDatePicker();
   });
+
+  // 工业界 / AB实验 筛选按钮
+  const filterIndustryBtn = document.getElementById('filterIndustry');
+  if (filterIndustryBtn) {
+    filterIndustryBtn.addEventListener('click', () => {
+      filterIndustryActive = !filterIndustryActive;
+      filterIndustryBtn.classList.toggle('active', filterIndustryActive);
+      renderPapers();
+    });
+  }
+  const filterAbTestBtn = document.getElementById('filterAbTest');
+  if (filterAbTestBtn) {
+    filterAbTestBtn.addEventListener('click', () => {
+      filterAbTestActive = !filterAbTestActive;
+      filterAbTestBtn.classList.toggle('active', filterAbTestActive);
+      renderPapers();
+    });
+  }
   
   const datePickerModal = document.querySelector('.date-picker-modal');
   datePickerModal.addEventListener('click', (event) => {
@@ -932,7 +952,10 @@ function parseJsonlData(jsonlText, date) {
         conclusion: paper.AI && paper.AI.conclusion ? paper.AI.conclusion : '',
         code_url: paper.code_url || '',
         code_stars: paper.code_stars || 0,
-        code_last_update: paper.code_last_update || ''
+        code_last_update: paper.code_last_update || '',
+        is_ab_test: !!(paper.AI && paper.AI.is_ab_test),
+        is_industrial_paper: !!(paper.AI && paper.AI.is_industrial_paper),
+        affiliation_type: (paper.AI && paper.AI.affiliation_type) ? paper.AI.affiliation_type : 'unknown'
       });
     } catch (error) {
       console.error('解析JSON行失败:', error, line);
@@ -1113,6 +1136,14 @@ function renderPapers() {
   
   // 创建匹配论文的集合
   let filteredPapers = [...papers];
+
+  // 工业界 / AB实验 硬过滤(不满足直接隐藏)
+  if (filterIndustryActive) {
+    filteredPapers = filteredPapers.filter(p => p.is_industrial_paper);
+  }
+  if (filterAbTestActive) {
+    filteredPapers = filteredPapers.filter(p => p.is_ab_test);
+  }
 
   // 重置所有论文的匹配状态，避免上次渲染的残留
   filteredPapers.forEach(p => {
@@ -1357,6 +1388,11 @@ function renderPapers() {
       paper.allCategories.map(cat => `<span class="category-tag">${cat}</span>`).join('') : 
       `<span class="category-tag">${paper.category}</span>`;
     
+    // 工业界 / AB实验 徽章
+    const attrBadges =
+      (paper.is_industrial_paper ? '<span class="paper-badge badge-industry">🏭 工业界</span>' : '') +
+      (paper.is_ab_test ? '<span class="paper-badge badge-abtest">🧪 AB实验</span>' : '');
+    
     // 组合需要高亮的词：关键词 + 文本搜索
     const titleSummaryTerms = [];
     if (activeKeywords.length > 0) {
@@ -1407,6 +1443,7 @@ function renderPapers() {
         <p class="paper-card-authors">${formattedAuthors}</p>
         <div class="paper-card-categories">
           ${categoryTags}
+          ${attrBadges}
         </div>
       </div>
       <div class="paper-card-body">
@@ -1504,6 +1541,7 @@ function showPaperDetails(paper, paperIndex) {
       <p><strong>Authors: </strong>${highlightedAuthors}</p>
       <p><strong>Categories: </strong>${categoryDisplay}</p>
       <p><strong>Date: </strong>${formatDate(paper.date)}</p>
+      <p><strong>Affiliation: </strong>${paper.affiliation_type || 'unknown'} &nbsp; <strong>Industrial: </strong>${paper.is_industrial_paper ? '是' : '否'} &nbsp; <strong>AB Test: </strong>${paper.is_ab_test ? '是' : '否'}</p>
       
       
       <h3>TL;DR</h3>

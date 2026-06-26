@@ -8,14 +8,41 @@
 import arxiv
 import json
 import os
+import re
 import sys
+import time
 from datetime import datetime, timedelta
+
+import fitz  # PyMuPDF
+import requests
 
 
 class DailyArxivPipeline:
     def __init__(self):
         self.page_size = 100
         self.client = arxiv.Client(self.page_size)
+        # 是否下载 PDF 首页解析作者机构(默认开启,可用 FETCH_PDF=false 关闭以加速)
+        self.fetch_pdf = os.environ.get("FETCH_PDF", "true").lower() != "false"
+
+    def extract_affiliations(self, pdf_url: str) -> str:
+        """下载 PDF 首页并提取 Abstract 之前的作者机构文本。失败返回空字符串。"""
+        if not self.fetch_pdf:
+            return ""
+        try:
+            resp = requests.get(pdf_url, timeout=20)
+            resp.raise_for_status()
+            doc = fitz.open(stream=resp.content, filetype="pdf")
+            first_page = doc[0].get_text()
+            doc.close()
+            # 取 Abstract 之前的部分(机构信息几乎都在首页作者下方、摘要之前)
+            head = re.split(r"\bAbstract\b", first_page, maxsplit=1, flags=re.I)[0]
+            return head.strip()[:1500]
+        except Exception as e:
+            print(f"Failed to extract affiliations from {pdf_url}: {e}", file=sys.stderr)
+            return ""
+        finally:
+            # 轻量节流,降低被限流概率
+            time.sleep(1)
 
     def process_item(self, item: dict, spider):
         item["pdf"] = f"https://arxiv.org/pdf/{item['id']}"
@@ -29,4 +56,5 @@ class DailyArxivPipeline:
         item["categories"] = paper.categories
         item["comment"] = paper.comment
         item["summary"] = paper.summary
+        item["affiliations"] = self.extract_affiliations(item["pdf"])
         return item

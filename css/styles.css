@@ -682,6 +682,51 @@ main {
   border: 1px solid var(--border-accent);
 }
 
+/* 工业界 / AB实验 徽章 */
+.paper-badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-industry {
+  background-color: rgba(234, 88, 12, 0.12);
+  color: #ea580c;
+  border: 1px solid rgba(234, 88, 12, 0.4);
+}
+.badge-abtest {
+  background-color: rgba(22, 163, 74, 0.12);
+  color: #16a34a;
+  border: 1px solid rgba(22, 163, 74, 0.4);
+}
+
+/* AI 属性筛选按钮 */
+.ai-attr-filters {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.ai-attr-btn {
+  font-size: 13px;
+  padding: 4px 12px;
+  border-radius: 16px;
+  cursor: pointer;
+  background-color: var(--background-hover);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-accent);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.ai-attr-btn:hover {
+  background-color: var(--background-secondary, rgba(102, 126, 234, 0.08));
+}
+.ai-attr-btn.active {
+  background-color: var(--primary-color);
+  color: #fff;
+  border-color: var(--primary-color);
+}
+
 .paper-card-body {
   padding: 20px;
   flex-grow: 1;

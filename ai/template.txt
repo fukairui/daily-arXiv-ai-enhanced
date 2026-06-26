@@ -1,4 +1,12 @@
-Please analyze the following abstract of papers. 
+Please analyze the following paper.
 
-Content:
+Author affiliations (may be empty):
+{affiliations}
+
+Abstract:
 {content}
+
+Additionally judge:
+1. is_ab_test: does the abstract mention A/B testing / online controlled experiment / deployed online / production / live traffic?
+2. affiliation_type: academia (only universities/institutes), industry (only companies), collaboration (both industry and academia), unknown (cannot tell).
+3. is_industrial_paper: TRUE if affiliation_type is industry OR collaboration (any industry participation counts as industrial); otherwise false.

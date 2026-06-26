@@ -121,15 +121,22 @@ def process_single_item(chain, item: Dict, language: str) -> Dict:
         "motivation": "Motivation analysis unavailable",
         "method": "Method extraction failed",
         "result": "Result analysis unavailable",
-        "conclusion": "Conclusion extraction failed"
+        "conclusion": "Conclusion extraction failed",
+        "is_ab_test": False,
+        "is_industrial_paper": False,
+        "affiliation_type": "unknown"
     }
     
     try:
         response: Structure = chain.invoke({
             "language": language,
-            "content": item['summary']
+            "content": item['summary'],
+            "affiliations": item.get('affiliations', '')
         })
         item['AI'] = response.model_dump()
+        # 一致性纠正:产学合作也算工业界参与
+        if item['AI'].get('affiliation_type') in ('industry', 'collaboration'):
+            item['AI']['is_industrial_paper'] = True
     except langchain_core.exceptions.OutputParserException as e:
         # 尝试从错误信息中提取 JSON 字符串并修复
         error_msg = str(e)
@@ -205,7 +212,10 @@ def process_all_items(data: List[Dict], model_name: str, language: str, max_work
                     "motivation": "Processing failed",
                     "method": "Processing failed",
                     "result": "Processing failed",
-                    "conclusion": "Processing failed"
+                    "conclusion": "Processing failed",
+                    "is_ab_test": False,
+                    "is_industrial_paper": False,
+                    "affiliation_type": "unknown"
                 }
     
     return processed_data
