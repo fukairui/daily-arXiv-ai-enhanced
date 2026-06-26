@@ -678,6 +678,25 @@ main {
   overflow: visible;
 }
 
+/* 机构行：公司名加粗 */
+.paper-card-orgs {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+.paper-card-orgs .org-company {
+  font-weight: 700;
+  color: var(--text-color);
+}
+.paper-card-orgs .org-academic {
+  font-weight: 400;
+}
+.paper-card-orgs .org-sep {
+  margin: 0 6px;
+  color: var(--border-color);
+}
+
 /* 作者列表项样式 */
 .paper-card-authors .author-item {
   display: inline;

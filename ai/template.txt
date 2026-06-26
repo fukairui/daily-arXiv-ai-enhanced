@@ -10,3 +10,6 @@ Additionally judge:
 1. is_ab_test: does the abstract mention A/B testing / online controlled experiment / deployed online / production / live traffic?
 2. affiliation_type: academia (only universities/institutes), industry (only companies), collaboration (both industry and academia), unknown (cannot tell).
 3. is_industrial_paper: TRUE if affiliation_type is industry OR collaboration (any industry participation counts as industrial); otherwise false.
+4. org_display: extract the author affiliations and output a short comma-separated list using common abbreviations (e.g. "Zhejiang University" -> "ZJU", "Massachusetts Institute of Technology" -> "MIT", "Google Research" -> "Google", "ByteDance Inc." -> "ByteDance"). Put company/industry orgs FIRST, then academic ones. At most 3 items. Empty string if affiliations are empty/unknown.
+5. industry_orgs: from org_display, output only the ones that are companies / industry labs, comma-separated. Empty string if none.
+

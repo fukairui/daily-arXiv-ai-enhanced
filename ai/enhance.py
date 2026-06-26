@@ -124,7 +124,9 @@ def process_single_item(chain, item: Dict, language: str) -> Dict:
         "conclusion": "Conclusion extraction failed",
         "is_ab_test": False,
         "is_industrial_paper": False,
-        "affiliation_type": "unknown"
+        "affiliation_type": "unknown",
+        "org_display": "",
+        "industry_orgs": ""
     }
     
     try:
@@ -215,7 +217,9 @@ def process_all_items(data: List[Dict], model_name: str, language: str, max_work
                     "conclusion": "Processing failed",
                     "is_ab_test": False,
                     "is_industrial_paper": False,
-                    "affiliation_type": "unknown"
+                    "affiliation_type": "unknown",
+                    "org_display": "",
+                    "industry_orgs": ""
                 }
     
     return processed_data

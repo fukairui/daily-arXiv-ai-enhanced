@@ -66,6 +66,7 @@ if __name__ == "__main__":
                         is_ab_test=ai_data.get('is_ab_test', False),
                         is_industrial_paper=ai_data.get('is_industrial_paper', False),
                         affiliation_type=ai_data.get('affiliation_type', 'unknown'),
+                        org_display=ai_data.get('org_display', ''),
                         cate=item['categories'][0],
                         idx=next(idx)
                     )

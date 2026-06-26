@@ -914,11 +914,34 @@ async function loadPapersByDate(date) {
   }
 }
 
+// 构建机构展示行：org_display 用逗号分隔，industry_orgs 中的公司名加粗
+function buildOrgLine(orgDisplay, industryOrgs) {
+  if (!orgDisplay || !orgDisplay.trim()) return '';
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const industrySet = new Set(
+    (industryOrgs || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+  );
+  const items = orgDisplay.split(',').map(s => s.trim()).filter(Boolean);
+  if (items.length === 0) return '';
+  const html = items.map(org => {
+    const isCompany = industrySet.has(org.toLowerCase());
+    return isCompany
+      ? `<strong class="org-company">${esc(org)}</strong>`
+      : `<span class="org-academic">${esc(org)}</span>`;
+  }).join('<span class="org-sep">·</span>');
+  return `<p class="paper-card-orgs">${html}</p>`;
+}
+
+// 同上，但只返回内联 HTML（用于详情弹窗）
+function buildOrgInline(orgDisplay, industryOrgs) {
+  const line = buildOrgLine(orgDisplay, industryOrgs);
+  return line.replace(/^<p class="paper-card-orgs">/, '').replace(/<\/p>$/, '');
+}
+
 function parseJsonlData(jsonlText, date) {
   const result = {};
-  
   const lines = jsonlText.trim().split('\n');
-  
+
   lines.forEach(line => {
     try {
       const paper = JSON.parse(line);
@@ -955,7 +978,9 @@ function parseJsonlData(jsonlText, date) {
         code_last_update: paper.code_last_update || '',
         is_ab_test: !!(paper.AI && paper.AI.is_ab_test),
         is_industrial_paper: !!(paper.AI && paper.AI.is_industrial_paper),
-        affiliation_type: (paper.AI && paper.AI.affiliation_type) ? paper.AI.affiliation_type : 'unknown'
+        affiliation_type: (paper.AI && paper.AI.affiliation_type) ? paper.AI.affiliation_type : 'unknown',
+        org_display: (paper.AI && paper.AI.org_display) ? paper.AI.org_display : '',
+        industry_orgs: (paper.AI && paper.AI.industry_orgs) ? paper.AI.industry_orgs : ''
       });
     } catch (error) {
       console.error('解析JSON行失败:', error, line);
@@ -1392,6 +1417,9 @@ function renderPapers() {
     const attrBadges =
       (paper.is_industrial_paper ? '<span class="paper-badge badge-industry">🏭 工业界</span>' : '') +
       (paper.is_ab_test ? '<span class="paper-badge badge-abtest">🧪 AB实验</span>' : '');
+
+    // 机构行：工业界公司名加粗
+    const orgLine = buildOrgLine(paper.org_display, paper.industry_orgs);
     
     // 组合需要高亮的词：关键词 + 文本搜索
     const titleSummaryTerms = [];
@@ -1441,6 +1469,7 @@ function renderPapers() {
       <div class="paper-card-header">
         <h3 class="paper-card-title">${highlightedTitle}</h3>
         <p class="paper-card-authors">${formattedAuthors}</p>
+        ${orgLine}
         <div class="paper-card-categories">
           ${categoryTags}
           ${attrBadges}
@@ -1539,6 +1568,7 @@ function showPaperDetails(paper, paperIndex) {
   const modalContent = `
     <div class="paper-details ${matchedPaperClass}">
       <p><strong>Authors: </strong>${highlightedAuthors}</p>
+      ${paper.org_display ? `<p><strong>Affiliations: </strong>${buildOrgInline(paper.org_display, paper.industry_orgs)}</p>` : ''}
       <p><strong>Categories: </strong>${categoryDisplay}</p>
       <p><strong>Date: </strong>${formatDate(paper.date)}</p>
       <p><strong>Affiliation: </strong>${paper.affiliation_type || 'unknown'} &nbsp; <strong>Industrial: </strong>${paper.is_industrial_paper ? '是' : '否'} &nbsp; <strong>AB Test: </strong>${paper.is_ab_test ? '是' : '否'}</p>
