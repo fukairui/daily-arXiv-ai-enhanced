@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import argparse
+import re
 from datetime import datetime, timezone
 
 import requests
@@ -127,10 +128,59 @@ def update_favorites_index(data_dir: str, paper_id: str, title: str, date: str, 
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 
+def _extract_json_object(text: str) -> dict:
+    """从模型输出中提取 JSON 对象。
+
+    deepseek-reasoner 不支持 function/tool calling，因此这里用普通文本输出 JSON，
+    再在本地解析。兼容 ```json ... ``` 代码块与前后带解释文本的情况。
+    """
+    if not text:
+        raise ValueError("empty model response")
+
+    # 优先提取 fenced json code block
+    fenced = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text, re.IGNORECASE)
+    if fenced:
+        return json.loads(fenced.group(1))
+
+    # 否则提取第一个完整 JSON 对象范围
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("no JSON object found in model response")
+    return json.loads(text[start:end + 1])
+
+
+def _normalize_deep_result(raw: dict) -> dict:
+    """校验并规范化 deep analysis 结果，确保前端字段齐全。"""
+    list_fields = ["innovations", "limitations", "future_work", "tags", "new_tags"]
+    text_fields = [
+        "background", "problem", "motivation", "method_overview",
+        "method_details", "experiments", "results_analysis", "conclusion",
+        "related_comparison",
+    ]
+
+    data = dict(raw or {})
+    for field in text_fields:
+        data[field] = str(data.get(field) or "")
+    for field in list_fields:
+        value = data.get(field)
+        data[field] = value if isinstance(value, list) else []
+
+    # new_tags 仅保留 {name, desc}
+    cleaned_new_tags = []
+    for t in data.get("new_tags", []):
+        if isinstance(t, dict) and t.get("name"):
+            cleaned_new_tags.append({"name": str(t.get("name", "")).strip(), "desc": str(t.get("desc", ""))})
+    data["new_tags"] = cleaned_new_tags
+
+    # 用 Pydantic 做最后校验，确保结构稳定
+    return DeepStructure.model_validate(data).model_dump()
+
+
 def main():
     args = parse_args()
-    model_name = os.environ.get("DEEP_MODEL_NAME", "deepseek-reasoner")
-    language = os.environ.get("LANGUAGE", "Chinese")
+    model_name = os.environ.get("DEEP_MODEL_NAME") or "deepseek-reasoner"
+    language = os.environ.get("LANGUAGE") or "Chinese"
 
     paper_id = args.id
     pdf_url = args.pdf or f"https://arxiv.org/pdf/{paper_id}"
@@ -144,23 +194,24 @@ def main():
 
     known_names, known_tags_str = load_known_tags(args.known_tags)
 
-    llm = ChatOpenAI(model=model_name).with_structured_output(
-        DeepStructure, method="function_calling"
-    )
+    # deepseek-reasoner 是 thinking mode，不支持 tool/function calling。
+    # 因此这里使用普通 chat completion，让模型输出严格 JSON，再在本地解析和 Pydantic 校验。
+    llm = ChatOpenAI(model=model_name)
     prompt_template = ChatPromptTemplate.from_messages([
         SystemMessagePromptTemplate.from_template(system),
         HumanMessagePromptTemplate.from_template(template=template),
     ])
     chain = prompt_template | llm
 
-    response: DeepStructure = chain.invoke({
+    response = chain.invoke({
         "language": language,
         "title": args.title or paper_id,
         "affiliations": args.affiliations,
         "known_tags": known_tags_str,
         "full_text": full_text,
     })
-    result = response.model_dump()
+    raw_json = _extract_json_object(response.content)
+    result = _normalize_deep_result(raw_json)
 
     # 只保留确实存在于已知标签库的 tags（防止模型把新标签塞进 tags）
     if known_names:

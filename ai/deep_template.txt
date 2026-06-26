@@ -18,3 +18,23 @@ Requirements:
 1. Fill every analysis field thoroughly and technically, based on the FULL TEXT (not just the abstract). Each prose field should be a detailed paragraph; list fields (innovations/limitations/future_work) should contain concrete bullet points.
 2. tags: choose the 1-3 MOST relevant tags from the known tag library above. The tag names you output here MUST exactly match existing tag names. If none of the known tags fit, leave tags empty.
 3. new_tags: ONLY if this paper clearly belongs to a brand-new research direction that none of the known tags can cover, propose new tag(s) here with a one-sentence description. Otherwise return an empty list. Never duplicate an existing tag in new_tags. Prefer reusing existing tags over creating new ones.
+
+Output format:
+Return ONLY a valid JSON object. Do NOT wrap it in markdown fences. Do NOT add explanations before or after the JSON.
+The JSON object MUST have exactly these keys and compatible value types:
+{
+  "background": "string",
+  "problem": "string",
+  "motivation": "string",
+  "method_overview": "string",
+  "method_details": "string",
+  "experiments": "string",
+  "results_analysis": "string",
+  "conclusion": "string",
+  "innovations": ["string"],
+  "limitations": ["string"],
+  "future_work": ["string"],
+  "related_comparison": "string",
+  "tags": ["Existing Tag Name"],
+  "new_tags": [{"name": "New Tag Name", "desc": "one sentence description"}]
+}
