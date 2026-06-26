@@ -1919,17 +1919,17 @@ footer {
 
 /* 匹配论文卡片的高亮样式 */
 .paper-card.matched-paper {
-  box-shadow: 0 0 0 2px var(--brand), var(--shadow-md);
-  background-color: var(--brand-soft);
+  box-shadow: var(--shadow-md);
+  background-color: rgba(59, 91, 219, 0.035);
   position: relative;
   z-index: 2;
-  border: 1px solid var(--border-accent);
+  border: 1px solid var(--brand);
 }
 
 .paper-card.matched-paper:hover {
-  box-shadow: 0 0 0 2px var(--brand), var(--shadow-lg);
+  box-shadow: var(--shadow-lg);
   transform: translateY(-3px);
-  border: 1px solid var(--border-accent);
+  border: 1px solid var(--brand);
 }
 
 /* 移除这个 ::after 星星，只使用 .match-badge */
