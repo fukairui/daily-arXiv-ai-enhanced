@@ -452,18 +452,19 @@
   color: #b91c1c;
 }
 
-/* PAT 输入框需要承载很长的 token，单独做成稳定的响应式布局，避免被右侧中文按钮挤压。 */
+/* PAT 输入框需要承载很长的 token，使用纵向布局避免把输入框挤到右侧或撑破一行。 */
 .pat-input-container {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
   width: 100%;
 }
 
 #githubPatInput {
   display: block;
   width: 100%;
-  min-width: 280px;
+  min-width: 0;
   box-sizing: border-box;
   background: #ffffff;
   color: #111827;
@@ -477,21 +478,7 @@
 }
 
 #testPat {
-  flex: 0 0 auto;
+  align-self: flex-start;
   white-space: nowrap;
   min-width: 104px;
-}
-
-@media (max-width: 560px) {
-  .pat-input-container {
-    grid-template-columns: 1fr;
-  }
-
-  #githubPatInput {
-    min-width: 0;
-  }
-
-  #testPat {
-    width: 100%;
-  }
 }
