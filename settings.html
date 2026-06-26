@@ -156,24 +156,38 @@
                                 Deep Analysis (深度分析)
                             </div>
                         </div>
-                        <div class="settings-card">
-                            <div class="settings-item">
-                                <p class="settings-desc">
-                                    收藏的论文可触发"深度分析"：后端将下载 PDF 全文并用更强模型生成论文精读级解读与研究方向标签。
-                                    此功能通过 GitHub Actions 在你的仓库运行，需要一个个人访问令牌 (PAT) 来触发。
-                                </p>
-                                <div class="pat-warning">
-                                    ⚠️ 请使用 <strong>Fine-grained PAT</strong>，仅授权本仓库的
-                                    <code>Contents: Read and write</code> 权限，并建议设置较短有效期。
-                                    令牌仅保存在你本机浏览器的 localStorage，<strong>不会上传仓库</strong>；如有泄露可随时在 GitHub 吊销。
-                                    <a href="https://github.com/settings/tokens?type=beta" target="_blank">前往创建 PAT →</a>
+                        <div class="settings-card deep-analysis-card">
+                            <div class="deep-settings-stack">
+                                <div class="deep-settings-block">
+                                    <h3>功能说明</h3>
+                                    <p class="settings-desc">
+                                        收藏论文后，可以在收藏夹触发"深度分析"。后端会通过 GitHub Actions 下载 PDF 全文，
+                                        再调用更强模型生成论文精读级解读，并写回 data 分支。
+                                    </p>
                                 </div>
-                                <label class="settings-label" for="githubPatInput">GitHub Personal Access Token</label>
-                                <div class="pat-input-container">
+
+                                <div class="deep-settings-block pat-warning-block">
+                                    <h3>权限要求</h3>
+                                    <div class="pat-warning">
+                                        ⚠️ 请使用 <strong>Fine-grained PAT</strong>，仅授权本仓库的
+                                        <code>Contents: Read and write</code> 权限，并建议设置较短有效期。
+                                        令牌仅保存在你本机浏览器的 localStorage，<strong>不会上传仓库</strong>；如有泄露可随时在 GitHub 吊销。
+                                        <a href="https://github.com/settings/tokens?type=beta" target="_blank">前往创建 PAT →</a>
+                                    </div>
+                                </div>
+
+                                <div class="deep-settings-block pat-token-block">
+                                    <h3>填写令牌</h3>
+                                    <label class="settings-label" for="githubPatInput">GitHub Personal Access Token</label>
                                     <input type="password" id="githubPatInput" class="settings-input" placeholder="github_pat_...">
-                                    <button id="testPat" class="add-tag-button">测试连通性</button>
                                 </div>
-                                <p id="patStatus" class="pat-status"></p>
+
+                                <div class="deep-settings-block pat-test-block">
+                                    <h3>连通性测试</h3>
+                                    <p class="settings-desc">保存前可以先测试 PAT 是否能访问当前仓库。</p>
+                                    <button id="testPat" class="add-tag-button">测试连通性</button>
+                                    <p id="patStatus" class="pat-status"></p>
+                                </div>
                             </div>
                         </div>
                     </div>

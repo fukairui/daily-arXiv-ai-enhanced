@@ -452,13 +452,42 @@
   color: #b91c1c;
 }
 
-/* PAT 输入框需要承载很长的 token，使用纵向布局避免把输入框挤到右侧或撑破一行。 */
-.pat-input-container {
+/* 深度分析配置分块布局 */
+.deep-analysis-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.deep-settings-stack {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-  width: 100%;
+}
+
+.deep-settings-block {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.deep-settings-block:last-child {
+  border-bottom: none;
+}
+
+.deep-settings-block h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text-color);
+}
+
+.pat-token-block {
+  background: rgba(59, 130, 246, 0.035);
+}
+
+.pat-test-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 #githubPatInput {
