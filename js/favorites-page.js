@@ -23,7 +23,6 @@ async function init() {
     await restoreFromRemote();
     await loadKnownTags();
     await loadDeepForFavorites();
-    await loadPendingTags();
     render();
 }
 
@@ -39,16 +38,16 @@ async function restoreFromRemote() {
             const row = JSON.parse(line);
             if (row.id) {
                 ids.push(row.id);
-                // 仅当本地无元数据时，用远端补全
-                if (!metaAll[row.id]) {
-                    metaAll[row.id] = {
-                        title: row.title || row.id,
-                        date: row.date || '',
-                        pdf: `https://arxiv.org/pdf/${row.id}`,
-                        abs: `https://arxiv.org/abs/${row.id}`,
-                        categories: []
-                    };
-                }
+                const currentMeta = metaAll[row.id] || {};
+                metaAll[row.id] = {
+                    ...currentMeta,
+                    title: currentMeta.title || row.title || row.id,
+                    date: currentMeta.date || row.date || '',
+                    pdf: currentMeta.pdf || `https://arxiv.org/pdf/${row.id}`,
+                    abs: currentMeta.abs || `https://arxiv.org/abs/${row.id}`,
+                    categories: currentMeta.categories || [],
+                    tags: Array.isArray(row.tags) ? row.tags : (currentMeta.tags || [])
+                };
             }
         } catch (e) { /* ignore */ }
     });
@@ -103,12 +102,12 @@ function renderStats() {
     el.textContent = `共 ${ids.length} 篇收藏 · 已深度分析 ${analyzed} 篇 · 待分析 ${ids.length - analyzed} 篇`;
 }
 
-/** 收集所有收藏论文出现过的 tags（来自 deep 结果） */
+/** 收集所有收藏论文出现过的 tags（来自手动标签 + deep 结果） */
 function collectTags() {
     const counter = {};
+    const meta = Favorites.getMeta();
     Favorites.getIds().forEach(id => {
-        const d = deepCache[id];
-        (d && d.tags ? d.tags : []).forEach(t => {
+        getPaperTags(id, meta).forEach(t => {
             counter[t] = (counter[t] || 0) + 1;
         });
     });
@@ -140,12 +139,61 @@ function escapeHtml(s) {
     return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+function normalizeTagName(tag) {
+    return (tag || '').trim().replace(/\s+/g, ' ');
+}
+
+function uniqueTags(tags) {
+    const seen = new Set();
+    const out = [];
+    (tags || []).forEach(t => {
+        const name = normalizeTagName(t);
+        const key = name.toLowerCase();
+        if (name && !seen.has(key)) {
+            seen.add(key);
+            out.push(name);
+        }
+    });
+    return out;
+}
+
+function getPaperTags(id, metaMap = Favorites.getMeta()) {
+    const metaTags = (metaMap[id] && Array.isArray(metaMap[id].tags)) ? metaMap[id].tags : [];
+    // 标签以用户手动维护为准，不再依赖 LLM 自动输出的 tags。
+    return uniqueTags(metaTags);
+}
+
+function getKnownTagNames() {
+    return uniqueTags(knownTags.map(t => t.name).filter(Boolean));
+}
+
+function getTagSuggestions(query) {
+    const q = normalizeTagName(query).toLowerCase();
+    if (!q) return [];
+    return getKnownTagNames()
+        .filter(name => name.toLowerCase().includes(q))
+        .slice(0, 8);
+}
+
+function renderTagBadges(tags, paperId, removable = true) {
+    if (!tags || tags.length === 0) {
+        return '<span class="fav-tag empty">未打标签</span>';
+    }
+    return tags.map(t => `
+        <span class="fav-tag">
+            ${escapeHtml(t)}
+            ${removable ? `<button class="remove-tag-btn" data-id="${escapeHtml(paperId)}" data-tag="${escapeHtml(t)}" title="移除标签">×</button>` : ''}
+        </span>
+    `).join('');
+}
+
 function renderList() {
     const container = document.getElementById('favoritesList');
     let ids = Favorites.getIds();
 
+    const meta = Favorites.getMeta();
     if (activeTagFilter) {
-        ids = ids.filter(id => deepCache[id] && (deepCache[id].tags || []).includes(activeTagFilter));
+        ids = ids.filter(id => getPaperTags(id, meta).includes(activeTagFilter));
     }
 
     if (ids.length === 0) {
@@ -153,13 +201,12 @@ function renderList() {
         return;
     }
 
-    const meta = Favorites.getMeta();
     container.innerHTML = '';
     ids.forEach(id => {
         const m = meta[id] || { title: id, date: '', pdf: `https://arxiv.org/pdf/${id}`, abs: `https://arxiv.org/abs/${id}` };
         const deep = deepCache[id];
-        const tagsHtml = (deep && deep.tags ? deep.tags : [])
-            .map(t => `<span class="fav-tag">${escapeHtml(t)}</span>`).join('');
+        const tags = getPaperTags(id, meta);
+        const tagsHtml = renderTagBadges(tags, id);
 
         const statusHtml = deep
             ? '<span class="deep-status done">已深度分析</span>'
@@ -176,6 +223,16 @@ function renderList() {
                     ${statusHtml}
                 </div>
                 <div class="fav-card-tags">${tagsHtml}</div>
+                <div class="manual-tag-editor" data-id="${escapeHtml(id)}">
+                    <div class="manual-tag-input-wrap">
+                        <input class="manual-tag-input" data-id="${escapeHtml(id)}" list="tag-suggestions-${escapeHtml(id)}" placeholder="添加研究方向 TAG，如 Semantic Identifier...">
+                        <datalist id="tag-suggestions-${escapeHtml(id)}">
+                            ${getKnownTagNames().map(t => `<option value="${escapeHtml(t)}"></option>`).join('')}
+                        </datalist>
+                        <button class="button add-paper-tag-btn" data-id="${escapeHtml(id)}">添加标签</button>
+                    </div>
+                    <div class="tag-suggestion-hint">输入时会匹配已有标签；新标签会自动加入标签库。</div>
+                </div>
             </div>
             <div class="fav-card-actions">
                 <a class="button icon-button" href="${escapeHtml(m.abs || ('https://arxiv.org/abs/' + id))}" target="_blank" title="arXiv">abs</a>
@@ -200,6 +257,118 @@ function renderList() {
             render();
         };
     });
+    container.querySelectorAll('.add-paper-tag-btn').forEach(btn => {
+        btn.onclick = () => {
+            const id = btn.dataset.id;
+            const input = btn.closest('.manual-tag-editor')?.querySelector('.manual-tag-input');
+            addTagToPaper(id, input ? input.value : '', btn);
+        };
+    });
+    container.querySelectorAll('.manual-tag-input').forEach(input => {
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const btn = input.closest('.manual-tag-editor')?.querySelector('.add-paper-tag-btn');
+                addTagToPaper(input.dataset.id, input.value, btn);
+            }
+        });
+    });
+    container.querySelectorAll('.remove-tag-btn').forEach(btn => {
+        btn.onclick = () => removeTagFromPaper(btn.dataset.id, btn.dataset.tag, btn);
+    });
+}
+
+/* ---------------- 手动标签管理 ---------------- */
+
+function setLocalPaperTags(id, tags) {
+    const meta = Favorites.getMeta();
+    meta[id] = meta[id] || { title: id, pdf: `https://arxiv.org/pdf/${id}`, abs: `https://arxiv.org/abs/${id}` };
+    meta[id].tags = uniqueTags(tags);
+    Favorites._saveMeta(meta);
+}
+
+function getLocalPaperTags(id) {
+    const meta = Favorites.getMeta();
+    return (meta[id] && Array.isArray(meta[id].tags)) ? meta[id].tags : [];
+}
+
+async function ensureTagInLibrary(tagName) {
+    const name = normalizeTagName(tagName);
+    if (!name) return { ok: false, message: '标签为空' };
+    const existing = getKnownTagNames().some(t => t.toLowerCase() === name.toLowerCase());
+    if (existing) return { ok: true };
+
+    const res = await GitHubClient.updateFileWithRetry('data/tags.json', (old) => {
+        let data = { tags: [] };
+        if (old) { try { data = JSON.parse(old); } catch (e) { data = { tags: [] }; } }
+        if (!Array.isArray(data.tags)) data.tags = [];
+        const exists = data.tags.some(t => (t.name || '').toLowerCase() === name.toLowerCase());
+        if (!exists) data.tags.push({ name, desc: '用户手动添加的研究方向标签', count: 1, created_by: 'user' });
+        return JSON.stringify(data, null, 2);
+    }, `tags: add "${name}"`);
+    if (res.ok) {
+        knownTags.push({ name, desc: '用户手动添加的研究方向标签', count: 1, created_by: 'user' });
+    }
+    return res;
+}
+
+async function syncFavoriteTagsToRemote(id, tags) {
+    const meta = Favorites.metaOf(id) || {};
+    return GitHubClient.updateFileWithRetry('data/favorites.jsonl', (old) => {
+        const rows = [];
+        if (old) {
+            old.split('\n').forEach(line => {
+                if (!line.trim()) return;
+                try { rows.push(JSON.parse(line)); } catch (e) { /* ignore malformed row */ }
+            });
+        }
+        const filtered = rows.filter(r => r.id !== id);
+        filtered.push({
+            id,
+            title: meta.title || id,
+            date: meta.date || '',
+            tags: uniqueTags(tags),
+            has_deep: !!deepCache[id],
+            favorited_at: new Date().toISOString(),
+        });
+        return filtered.map(r => JSON.stringify(r)).join('\n') + '\n';
+    }, `favorites: update tags for ${id}`);
+}
+
+async function addTagToPaper(id, rawTag, btn) {
+    const tag = normalizeTagName(rawTag);
+    if (!tag) return;
+    if (!GitHubClient.hasToken()) {
+        alert('请先在「设置」页配置 GitHub PAT，才能同步标签。');
+        return;
+    }
+    if (btn) { btn.disabled = true; btn.textContent = '添加中...'; }
+
+    const current = getLocalPaperTags(id);
+    const next = uniqueTags([...current, tag]);
+    setLocalPaperTags(id, next);
+
+    const libRes = await ensureTagInLibrary(tag);
+    const favRes = await syncFavoriteTagsToRemote(id, next);
+
+    if (btn) { btn.disabled = false; btn.textContent = '添加标签'; }
+    if (!libRes.ok || !favRes.ok) {
+        alert(`标签已保存到本地，但远端同步失败：${libRes.message || favRes.message || '未知错误'}`);
+    }
+    render();
+}
+
+async function removeTagFromPaper(id, tag, btn) {
+    if (!GitHubClient.hasToken()) {
+        alert('请先在「设置」页配置 GitHub PAT，才能同步标签。');
+        return;
+    }
+    if (btn) btn.disabled = true;
+    const next = getLocalPaperTags(id).filter(t => t.toLowerCase() !== tag.toLowerCase());
+    setLocalPaperTags(id, next);
+    const res = await syncFavoriteTagsToRemote(id, next);
+    if (!res.ok) alert(`远端同步失败：${res.message || '未知错误'}`);
+    render();
 }
 
 /* ---------------- 触发深度分析 ---------------- */
@@ -250,7 +419,6 @@ function pollForResult(id, btn) {
             try {
                 deepCache[id] = JSON.parse(res.content);
                 clearInterval(timer);
-                await loadPendingTags();
                 render();
             } catch (e) { /* keep polling */ }
         }
@@ -273,7 +441,7 @@ function showDeepModal(id) {
     const d = deep.deep || {};
     document.getElementById('deepModalTitle').textContent = deep.title || id;
 
-    const tagsHtml = (deep.tags || []).map(t => `<span class="fav-tag">${escapeHtml(t)}</span>`).join('');
+    const tagsHtml = renderTagBadges(getPaperTags(id), id, false);
     const body = `
         <div class="paper-details">
             <p class="deep-meta">模型: ${escapeHtml(deep.model || '')} · 分析时间: ${escapeHtml((deep.analyzed_at || '').slice(0, 10))}</p>

@@ -243,8 +243,8 @@ def main():
         json.dump(deep_obj, f, ensure_ascii=False, indent=2)
     print(f"Wrote {out_path}", file=sys.stderr)
 
-    append_pending_tags(data_dir, result.get("new_tags", []), paper_id)
-    update_favorites_index(data_dir, paper_id, args.title or paper_id, args.date, result.get("tags", []))
+    # 标签现在由用户在收藏夹页面手动维护并写入 tags.json / favorites.jsonl。
+    # 深度分析只产出 data/deep/{id}.json，避免 LLM 自动标签覆盖用户手动标签。
 
 
 if __name__ == "__main__":
