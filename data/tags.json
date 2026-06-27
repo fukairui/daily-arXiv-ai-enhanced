@@ -9,6 +9,11 @@
       "name": "Industrial Recommender Systems",
       "desc": "针对大规模生产环境下的推荐系统设计与优化方法。",
       "count": 1
+    },
+    {
+      "name": "Model-Centric Scaling",
+      "desc": "在推荐系统中统一扩展多个建模组件（行为、交互、任务）的范式。",
+      "count": 1
     }
   ]
 }
