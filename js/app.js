@@ -1723,9 +1723,8 @@ function showPaperDetails(paper, paperIndex) {
   }
   // ---------------------------
 
-  // 提示词来自：https://papers.cool/
-  prompt = `请你阅读这篇文章${paper.url.replace('abs', 'pdf')},总结一下这篇文章解决的问题、相关工作、研究方法、做了什么实验及其结果、结论，最后整体总结一下这篇文章的内容`
-  document.getElementById('kimiChatLink').href = `https://www.kimi.com/_prefill_chat?prefill_prompt=${prompt}&system_prompt=你是一个学术助手，后面的对话将围绕着以下论文内容进行，已经通过链接给出了论文的PDF和论文已有的FAQ。用户将继续向你咨询论文的相关问题，请你作出专业的回答，不要出现第一人称，当涉及到分点回答时，鼓励你以markdown格式输出。&send_immediately=true&force_search=true`;
+  const aiPrompt = `请你作为专业学术助手，阅读并分析这篇论文：\n\n标题：${paper.title}\nPDF：${paper.url.replace('abs', 'pdf')}\n\n请总结这篇文章解决的问题、相关工作、研究方法、实验设置及结果、结论、创新点和局限性。请用中文回答，尽量结构化、专业、具体。`;
+  document.getElementById('kimiChatLink').href = `https://chatgpt.com/?q=${encodeURIComponent(aiPrompt)}`;
   
   // 更新论文位置信息
   const paperPosition = document.getElementById('paperPosition');
