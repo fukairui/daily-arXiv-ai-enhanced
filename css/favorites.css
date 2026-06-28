@@ -161,6 +161,7 @@
 }
 
 .manual-tag-input-wrap {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
@@ -187,6 +188,53 @@
 
 .add-paper-tag-btn {
   white-space: nowrap;
+}
+
+.tag-suggestions-dropdown {
+  display: none;
+  position: absolute;
+  left: 0;
+  right: 104px;
+  top: calc(100% + 6px);
+  z-index: 50;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md, 0 10px 25px rgba(15, 23, 42, 0.12));
+  padding: 6px;
+}
+
+.tag-suggestions-dropdown.active {
+  display: block;
+}
+
+.tag-suggestion-item {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-color);
+  text-align: left;
+  cursor: pointer;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.tag-suggestion-item:hover,
+.tag-suggestion-item.active {
+  background: rgba(164, 44, 37, 0.08);
+  color: #a42c25;
+}
+
+.tag-suggestion-item mark {
+  background: rgba(164, 44, 37, 0.18);
+  color: inherit;
+  padding: 0 1px;
+  border-radius: 2px;
 }
 
 .tag-suggestion-hint {
@@ -287,5 +335,13 @@
   .fav-card-actions {
     flex-direction: row;
     flex-wrap: wrap;
+  }
+
+  .manual-tag-input-wrap {
+    grid-template-columns: 1fr;
+  }
+
+  .tag-suggestions-dropdown {
+    right: 0;
   }
 }

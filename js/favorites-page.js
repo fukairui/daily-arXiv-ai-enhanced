@@ -187,6 +187,79 @@ function renderTagBadges(tags, paperId, removable = true) {
     `).join('');
 }
 
+function getSuggestionDropdown(input) {
+    return input.closest('.manual-tag-input-wrap')?.querySelector('.tag-suggestions-dropdown');
+}
+
+function renderCustomTagSuggestions(input) {
+    const dropdown = getSuggestionDropdown(input);
+    if (!dropdown) return;
+
+    const query = normalizeTagName(input.value);
+    const suggestions = getTagSuggestions(query);
+    dropdown.innerHTML = '';
+
+    if (!query || suggestions.length === 0) {
+        dropdown.classList.remove('active');
+        return;
+    }
+
+    suggestions.forEach((tag, index) => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'tag-suggestion-item' + (index === 0 ? ' active' : '');
+        item.setAttribute('role', 'option');
+        item.dataset.tag = tag;
+        item.innerHTML = highlightSuggestion(tag, query);
+        item.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            input.value = tag;
+            hideTagSuggestions(input);
+            input.focus();
+        });
+        dropdown.appendChild(item);
+    });
+    dropdown.classList.add('active');
+}
+
+function highlightSuggestion(tag, query) {
+    const lowerTag = tag.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    const idx = lowerTag.indexOf(lowerQuery);
+    if (idx === -1) return escapeHtml(tag);
+    return `${escapeHtml(tag.slice(0, idx))}<mark>${escapeHtml(tag.slice(idx, idx + query.length))}</mark>${escapeHtml(tag.slice(idx + query.length))}`;
+}
+
+function hideTagSuggestions(input) {
+    const dropdown = getSuggestionDropdown(input);
+    if (dropdown) dropdown.classList.remove('active');
+}
+
+function moveActiveSuggestion(input, delta) {
+    const dropdown = getSuggestionDropdown(input);
+    if (!dropdown || !dropdown.classList.contains('active')) {
+        renderCustomTagSuggestions(input);
+        return;
+    }
+    const items = Array.from(dropdown.querySelectorAll('.tag-suggestion-item'));
+    if (items.length === 0) return;
+    let index = items.findIndex(item => item.classList.contains('active'));
+    index = (index + delta + items.length) % items.length;
+    items.forEach(item => item.classList.remove('active'));
+    items[index].classList.add('active');
+    items[index].scrollIntoView({ block: 'nearest' });
+}
+
+function selectActiveSuggestion(input) {
+    const dropdown = getSuggestionDropdown(input);
+    if (!dropdown || !dropdown.classList.contains('active')) return false;
+    const active = dropdown.querySelector('.tag-suggestion-item.active');
+    if (!active) return false;
+    input.value = active.dataset.tag || active.textContent.trim();
+    hideTagSuggestions(input);
+    return true;
+}
+
 function renderList() {
     const container = document.getElementById('favoritesList');
     let ids = Favorites.getIds();
@@ -225,13 +298,11 @@ function renderList() {
                 <div class="fav-card-tags">${tagsHtml}</div>
                 <div class="manual-tag-editor" data-id="${escapeHtml(id)}">
                     <div class="manual-tag-input-wrap">
-                        <input class="manual-tag-input" data-id="${escapeHtml(id)}" list="tag-suggestions-${escapeHtml(id)}" placeholder="添加研究方向 TAG，如 Semantic Identifier...">
-                        <datalist id="tag-suggestions-${escapeHtml(id)}">
-                            ${getKnownTagNames().map(t => `<option value="${escapeHtml(t)}"></option>`).join('')}
-                        </datalist>
+                        <input class="manual-tag-input" data-id="${escapeHtml(id)}" autocomplete="off" placeholder="添加研究方向 TAG，如 Semantic Identifier...">
                         <button class="button add-paper-tag-btn" data-id="${escapeHtml(id)}">添加标签</button>
+                        <div class="tag-suggestions-dropdown" role="listbox"></div>
                     </div>
-                    <div class="tag-suggestion-hint">输入时会匹配已有标签；新标签会自动加入标签库。</div>
+                    <div class="tag-suggestion-hint">输入时会从已有标签库中匹配候选；也可以直接输入新标签并自动入库。</div>
                 </div>
             </div>
             <div class="fav-card-actions">
@@ -265,9 +336,30 @@ function renderList() {
         };
     });
     container.querySelectorAll('.manual-tag-input').forEach(input => {
+        input.addEventListener('input', () => renderCustomTagSuggestions(input));
+        input.addEventListener('focus', () => renderCustomTagSuggestions(input));
+        input.addEventListener('blur', () => {
+            // 延迟隐藏，确保鼠标点击候选项时 mousedown 能先触发
+            setTimeout(() => hideTagSuggestions(input), 120);
+        });
         input.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                moveActiveSuggestion(input, 1);
+                return;
+            }
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                moveActiveSuggestion(input, -1);
+                return;
+            }
+            if (e.key === 'Escape') {
+                hideTagSuggestions(input);
+                return;
+            }
             if (e.key === 'Enter') {
                 e.preventDefault();
+                if (selectActiveSuggestion(input)) return;
                 const btn = input.closest('.manual-tag-editor')?.querySelector('.add-paper-tag-btn');
                 addTagToPaper(input.dataset.id, input.value, btn);
             }
