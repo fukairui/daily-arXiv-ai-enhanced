@@ -14,6 +14,12 @@
       "name": "Model-Centric Scaling",
       "desc": "在推荐系统中统一扩展多个建模组件（行为、交互、任务）的范式。",
       "count": 1
+    },
+    {
+      "name": "Task-space Scaling",
+      "desc": "用户手动添加的研究方向标签",
+      "count": 1,
+      "created_by": "user"
     }
   ]
 }
