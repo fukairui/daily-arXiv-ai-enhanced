@@ -46,7 +46,8 @@ async function restoreFromRemote() {
                     pdf: currentMeta.pdf || `https://arxiv.org/pdf/${row.id}`,
                     abs: currentMeta.abs || `https://arxiv.org/abs/${row.id}`,
                     categories: currentMeta.categories || [],
-                    tags: Array.isArray(row.tags) ? row.tags : (currentMeta.tags || [])
+                    tags: Array.isArray(row.tags) ? row.tags : (currentMeta.tags || []),
+                    summary: row.summary || currentMeta.summary || ''
                 };
             }
         } catch (e) { /* ignore */ }
@@ -280,6 +281,7 @@ function renderList() {
         const deep = deepCache[id];
         const tags = getPaperTags(id, meta);
         const tagsHtml = renderTagBadges(tags, id);
+        const summaryText = m.summary || '';
 
         const statusHtml = deep
             ? '<span class="deep-status done">已深度分析</span>'
@@ -296,6 +298,14 @@ function renderList() {
                     ${statusHtml}
                 </div>
                 <div class="fav-card-tags">${tagsHtml}</div>
+                <div class="favorite-summary-block">
+                    <div class="favorite-summary-title">简要摘要</div>
+                    <textarea class="favorite-summary-input" data-id="${escapeHtml(id)}" placeholder="暂无摘要，可自行补充...">${escapeHtml(summaryText)}</textarea>
+                    <div class="favorite-summary-actions">
+                        <button class="button save-summary-btn" data-id="${escapeHtml(id)}">保存摘要</button>
+                        <span class="summary-save-status" data-id="${escapeHtml(id)}"></span>
+                    </div>
+                </div>
                 <div class="manual-tag-editor" data-id="${escapeHtml(id)}">
                     <div class="manual-tag-input-wrap">
                         <input class="manual-tag-input" data-id="${escapeHtml(id)}" autocomplete="off" placeholder="添加研究方向 TAG，如 Semantic Identifier...">
@@ -368,6 +378,12 @@ function renderList() {
     container.querySelectorAll('.remove-tag-btn').forEach(btn => {
         btn.onclick = () => removeTagFromPaper(btn.dataset.id, btn.dataset.tag, btn);
     });
+    container.querySelectorAll('.save-summary-btn').forEach(btn => {
+        btn.onclick = () => {
+            const input = btn.closest('.favorite-summary-block')?.querySelector('.favorite-summary-input');
+            savePaperSummary(btn.dataset.id, input ? input.value : '', btn);
+        };
+    });
 }
 
 /* ---------------- 手动标签管理 ---------------- */
@@ -382,6 +398,13 @@ function setLocalPaperTags(id, tags) {
 function getLocalPaperTags(id) {
     const meta = Favorites.getMeta();
     return (meta[id] && Array.isArray(meta[id].tags)) ? meta[id].tags : [];
+}
+
+function setLocalPaperSummary(id, summary) {
+    const meta = Favorites.getMeta();
+    meta[id] = meta[id] || { title: id, pdf: `https://arxiv.org/pdf/${id}`, abs: `https://arxiv.org/abs/${id}` };
+    meta[id].summary = (summary || '').trim();
+    Favorites._saveMeta(meta);
 }
 
 async function ensureTagInLibrary(tagName) {
@@ -420,11 +443,60 @@ async function syncFavoriteTagsToRemote(id, tags) {
             title: meta.title || id,
             date: meta.date || '',
             tags: uniqueTags(tags),
+            summary: meta.summary || '',
             has_deep: !!deepCache[id],
             favorited_at: new Date().toISOString(),
         });
         return filtered.map(r => JSON.stringify(r)).join('\n') + '\n';
     }, `favorites: update tags for ${id}`);
+}
+
+async function syncFavoriteMetaToRemote(id) {
+    const meta = Favorites.metaOf(id) || {};
+    const tags = Array.isArray(meta.tags) ? meta.tags : [];
+    return GitHubClient.updateFileWithRetry('data/favorites.jsonl', (old) => {
+        const rows = [];
+        if (old) {
+            old.split('\n').forEach(line => {
+                if (!line.trim()) return;
+                try { rows.push(JSON.parse(line)); } catch (e) { /* ignore malformed row */ }
+            });
+        }
+        const filtered = rows.filter(r => r.id !== id);
+        filtered.push({
+            id,
+            title: meta.title || id,
+            date: meta.date || '',
+            tags: uniqueTags(tags),
+            summary: meta.summary || '',
+            has_deep: !!deepCache[id],
+            favorited_at: new Date().toISOString(),
+        });
+        return filtered.map(r => JSON.stringify(r)).join('\n') + '\n';
+    }, `favorites: update metadata for ${id}`);
+}
+
+async function savePaperSummary(id, rawSummary, btn) {
+    if (!GitHubClient.hasToken()) {
+        alert('请先在「设置」页配置 GitHub PAT，才能同步摘要。');
+        return;
+    }
+    const summary = (rawSummary || '').trim();
+    setLocalPaperSummary(id, summary);
+
+    const statusEl = Array.from(document.querySelectorAll('.summary-save-status')).find(el => el.dataset.id === id);
+    if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
+    if (statusEl) { statusEl.textContent = ''; statusEl.className = 'summary-save-status'; }
+
+    const res = await syncFavoriteMetaToRemote(id);
+    if (btn) { btn.disabled = false; btn.textContent = '保存摘要'; }
+    if (statusEl) {
+        statusEl.textContent = res.ok ? '已保存' : '保存失败';
+        statusEl.classList.toggle('success', !!res.ok);
+        statusEl.classList.toggle('error', !res.ok);
+        setTimeout(() => { statusEl.textContent = ''; }, 2500);
+    }
+    if (!res.ok) alert(`摘要已保存到本地，但远端同步失败：${res.message || '未知错误'}`);
 }
 
 async function addTagToPaper(id, rawTag, btn) {

@@ -1506,7 +1506,8 @@ function renderPapers() {
           date: paper.date,
           abs: paper.url,
           pdf: (paper.url || '').replace('abs', 'pdf'),
-          categories: paper.allCategories || paper.category
+          categories: paper.allCategories || paper.category,
+          summary: paper.summary || ''
         });
         favStar.classList.toggle('favorited', favored);
         const svg = favStar.querySelector('svg');
@@ -1673,7 +1674,8 @@ function showPaperDetails(paper, paperIndex) {
         date: paper.date,
         abs: paper.url,
         pdf: (paper.url || '').replace('abs', 'pdf'),
-        categories: paper.allCategories || paper.category
+        categories: paper.allCategories || paper.category,
+        summary: paper.summary || ''
       });
       syncFavBtn();
     };

@@ -154,6 +154,66 @@
   line-height: 1;
 }
 
+.favorite-summary-block {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.02);
+}
+
+.favorite-summary-title {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-color);
+  margin-bottom: 8px;
+}
+
+.favorite-summary-input {
+  width: 100%;
+  min-height: 86px;
+  resize: vertical;
+  box-sizing: border-box;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-color);
+  background: var(--card-bg, #fff);
+  outline: none;
+}
+
+.favorite-summary-input:focus {
+  border-color: #a42c25;
+  box-shadow: 0 0 0 2px rgba(164, 44, 37, 0.1);
+}
+
+.favorite-summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.save-summary-btn {
+  font-size: 12px;
+  padding: 5px 10px;
+}
+
+.summary-save-status {
+  font-size: 12px;
+  min-height: 16px;
+}
+
+.summary-save-status.success {
+  color: #15803d;
+}
+
+.summary-save-status.error {
+  color: #b91c1c;
+}
+
 .manual-tag-editor {
   margin-top: 12px;
   padding-top: 12px;
