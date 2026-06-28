@@ -46,6 +46,15 @@ async function restoreFromRemote() {
                     pdf: currentMeta.pdf || `https://arxiv.org/pdf/${row.id}`,
                     abs: currentMeta.abs || `https://arxiv.org/abs/${row.id}`,
                     categories: currentMeta.categories || [],
+                    authors: currentMeta.authors || row.authors || '',
+                    details: currentMeta.details || row.details || '',
+                    is_ab_test: typeof currentMeta.is_ab_test === 'boolean' ? currentMeta.is_ab_test : !!row.is_ab_test,
+                    is_industrial_paper: typeof currentMeta.is_industrial_paper === 'boolean' ? currentMeta.is_industrial_paper : !!row.is_industrial_paper,
+                    affiliation_type: currentMeta.affiliation_type || row.affiliation_type || 'unknown',
+                    org_display: currentMeta.org_display || row.org_display || '',
+                    industry_orgs: currentMeta.industry_orgs || row.industry_orgs || '',
+                    code_url: currentMeta.code_url || row.code_url || '',
+                    code_stars: currentMeta.code_stars || row.code_stars || 0,
                     // 如果本机手动编辑过标签/摘要，则本机结果优先，避免刷新时被远端旧数据覆盖。
                     tags: currentMeta.tagsEditedLocally
                         ? (currentMeta.tags || [])
@@ -173,6 +182,49 @@ function getKnownTagNames() {
     return uniqueTags(knownTags.map(t => t.name).filter(Boolean));
 }
 
+function formatCategories(categories) {
+    if (Array.isArray(categories)) return categories.filter(Boolean).join(', ');
+    return categories || '';
+}
+
+function formatDateLabel(date) {
+    if (!date) return '';
+    const d = new Date(date);
+    if (Number.isNaN(d.getTime())) return date;
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' });
+}
+
+function getAffiliationTypeLabel(type) {
+    const map = {
+        industry: '工业界',
+        academia: '学术界',
+        collaboration: '产学合作',
+        unknown: '未知'
+    };
+    return map[type] || type || '未知';
+}
+
+function renderAttributeBadges(m) {
+    const badges = [];
+    if (m.is_industrial_paper) badges.push('<span class="favorite-attr-badge badge-industry">🏭 工业界</span>');
+    if (m.is_ab_test) badges.push('<span class="favorite-attr-badge badge-abtest">🧪 AB实验</span>');
+    if (!m.is_industrial_paper && !m.is_ab_test && m.affiliation_type) {
+        badges.push(`<span class="favorite-attr-badge badge-affiliation">${escapeHtml(getAffiliationTypeLabel(m.affiliation_type))}</span>`);
+    }
+    return badges.join('');
+}
+
+function renderFavoriteInfo(m) {
+    const rows = [];
+    if (m.authors) rows.push(`<div class="favorite-info-row"><span>作者</span><strong>${escapeHtml(m.authors)}</strong></div>`);
+    if (m.org_display) rows.push(`<div class="favorite-info-row"><span>机构</span><strong>${escapeHtml(m.org_display)}</strong></div>`);
+    const categories = formatCategories(m.categories);
+    if (categories) rows.push(`<div class="favorite-info-row"><span>类别</span><strong>${escapeHtml(categories)}</strong></div>`);
+    const affiliation = getAffiliationTypeLabel(m.affiliation_type || 'unknown');
+    rows.push(`<div class="favorite-info-row compact"><span>属性</span><strong>${renderAttributeBadges(m) || escapeHtml(affiliation)}</strong></div>`);
+    return rows.length ? `<div class="favorite-info-grid">${rows.join('')}</div>` : '';
+}
+
 function getTagSuggestions(query) {
     const q = normalizeTagName(query).toLowerCase();
     if (!q) return [];
@@ -287,6 +339,7 @@ function renderList() {
         const tags = getPaperTags(id, meta);
         const tagsHtml = renderTagBadges(tags, id);
         const summaryText = m.summary || '';
+        const infoHtml = renderFavoriteInfo(m);
 
         const statusHtml = deep
             ? '<span class="deep-status done">已深度分析</span>'
@@ -299,9 +352,10 @@ function renderList() {
                 <h3 class="fav-card-title">${escapeHtml(m.title)}</h3>
                 <div class="fav-card-meta">
                     <span class="fav-card-id">${escapeHtml(id)}</span>
-                    ${m.date ? `<span class="fav-card-date">${escapeHtml(m.date)}</span>` : ''}
+                    ${m.date ? `<span class="fav-card-date">${escapeHtml(formatDateLabel(m.date))}</span>` : ''}
                     ${statusHtml}
                 </div>
+                ${infoHtml}
                 <div class="fav-card-tags">${tagsHtml}</div>
                 <div class="favorite-summary-block">
                     <div class="favorite-summary-title">简要摘要</div>
@@ -451,6 +505,16 @@ async function syncFavoriteTagsToRemote(id, tags) {
             id,
             title: meta.title || id,
             date: meta.date || '',
+            authors: meta.authors || '',
+            categories: meta.categories || [],
+            details: meta.details || '',
+            is_ab_test: !!meta.is_ab_test,
+            is_industrial_paper: !!meta.is_industrial_paper,
+            affiliation_type: meta.affiliation_type || 'unknown',
+            org_display: meta.org_display || '',
+            industry_orgs: meta.industry_orgs || '',
+            code_url: meta.code_url || '',
+            code_stars: meta.code_stars || 0,
             tags: uniqueTags(tags),
             summary: meta.summary || '',
             has_deep: !!deepCache[id],
@@ -476,6 +540,16 @@ async function syncFavoriteMetaToRemote(id) {
             id,
             title: meta.title || id,
             date: meta.date || '',
+            authors: meta.authors || '',
+            categories: meta.categories || [],
+            details: meta.details || '',
+            is_ab_test: !!meta.is_ab_test,
+            is_industrial_paper: !!meta.is_industrial_paper,
+            affiliation_type: meta.affiliation_type || 'unknown',
+            org_display: meta.org_display || '',
+            industry_orgs: meta.industry_orgs || '',
+            code_url: meta.code_url || '',
+            code_stars: meta.code_stars || 0,
             tags: uniqueTags(tags),
             summary: meta.summary || '',
             has_deep: !!deepCache[id],

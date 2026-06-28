@@ -938,6 +938,40 @@ function buildOrgInline(orgDisplay, industryOrgs) {
   return line.replace(/^<p class="paper-card-orgs">/, '').replace(/<\/p>$/, '');
 }
 
+function buildFavoriteMetaFromPaper(paper) {
+  return {
+    title: paper.title,
+    date: paper.date,
+    abs: paper.url,
+    pdf: (paper.url || '').replace('abs', 'pdf'),
+    categories: paper.allCategories || paper.category,
+    summary: paper.summary || '',
+    details: paper.details || '',
+    authors: paper.authors || '',
+    is_ab_test: !!paper.is_ab_test,
+    is_industrial_paper: !!paper.is_industrial_paper,
+    affiliation_type: paper.affiliation_type || 'unknown',
+    org_display: paper.org_display || '',
+    industry_orgs: paper.industry_orgs || '',
+    code_url: paper.code_url || '',
+    code_stars: paper.code_stars || 0
+  };
+}
+
+function syncExistingFavoriteMetaFromPaper(paper) {
+  if (!paper || !paper.id || !Favorites.has(paper.id)) return;
+  const all = Favorites.getMeta();
+  const current = all[paper.id] || {};
+  const fresh = buildFavoriteMetaFromPaper(paper);
+  all[paper.id] = {
+    ...current,
+    ...fresh,
+    // 用户在收藏夹手动编辑过摘要后，不能被首页重新加载的 AI 摘要覆盖。
+    summary: current.summaryEditedLocally ? (current.summary || '') : (current.summary || fresh.summary || '')
+  };
+  Favorites._saveMeta(all);
+}
+
 function parseJsonlData(jsonlText, date) {
   const result = {};
   const lines = jsonlText.trim().split('\n');
@@ -1501,14 +1535,7 @@ function renderPapers() {
     if (favStar) {
       favStar.addEventListener('click', (e) => {
         e.stopPropagation();
-        const favored = Favorites.toggle(paper.id, {
-          title: paper.title,
-          date: paper.date,
-          abs: paper.url,
-          pdf: (paper.url || '').replace('abs', 'pdf'),
-          categories: paper.allCategories || paper.category,
-          summary: paper.summary || ''
-        });
+        const favored = Favorites.toggle(paper.id, buildFavoriteMetaFromPaper(paper));
         favStar.classList.toggle('favorited', favored);
         const svg = favStar.querySelector('svg');
         if (svg) svg.setAttribute('fill', favored ? 'currentColor' : 'none');
@@ -1520,6 +1547,8 @@ function renderPapers() {
 }
 
 function showPaperDetails(paper, paperIndex) {
+  syncExistingFavoriteMetaFromPaper(paper);
+
   const modal = document.getElementById('paperModal');
   const modalTitle = document.getElementById('modalTitle');
   const modalBody = document.getElementById('modalBody');
@@ -1669,14 +1698,7 @@ function showPaperDetails(paper, paperIndex) {
     };
     syncFavBtn();
     favoriteButton.onclick = () => {
-      Favorites.toggle(paper.id, {
-        title: paper.title,
-        date: paper.date,
-        abs: paper.url,
-        pdf: (paper.url || '').replace('abs', 'pdf'),
-        categories: paper.allCategories || paper.category,
-        summary: paper.summary || ''
-      });
+      Favorites.toggle(paper.id, buildFavoriteMetaFromPaper(paper));
       syncFavBtn();
     };
   }

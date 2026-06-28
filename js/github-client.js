@@ -12,6 +12,8 @@
 const GitHubClient = {
     PAT_KEY: 'github_pat',
     API_BASE: 'https://api.github.com',
+    DEFAULT_MAX_RETRIES: 8,
+    _writeQueues: {},
 
     /** 读取 PAT */
     getToken: function() {
@@ -160,9 +162,53 @@ const GitHubClient = {
      * @param {number} maxRetries 最大重试次数
      * @returns {Promise<{ok:boolean, message?:string}>}
      */
-    updateFileWithRetry: async function(path, mutateFn, message, maxRetries = 3) {
+    _sleep: function(ms) {
+        return new Promise(r => setTimeout(r, ms));
+    },
+
+    _conflictBackoffMs: function(attempt) {
+        const base = Math.min(8000, 500 * Math.pow(1.7, attempt));
+        const jitter = Math.floor(Math.random() * 350);
+        return base + jitter;
+    },
+
+    _isConflictLike: function(res) {
+        if (!res) return false;
+        if (res.status === 409) return true;
+        // Contents API 在 sha 过期、分支刚被其他提交更新、或 create/update 判断不一致时可能返回 422。
+        // 仅把看起来像 sha/ref 冲突的 422 当作可重试错误，避免吞掉真正的参数错误。
+        const msg = (res.message || '').toLowerCase();
+        return res.status === 422 && (
+            msg.includes('sha') ||
+            msg.includes('reference') ||
+            msg.includes('update') ||
+            msg.includes('already exists') ||
+            msg.includes('does not match')
+        );
+    },
+
+    _enqueueFileUpdate: function(path, task) {
+        const previous = this._writeQueues[path] || Promise.resolve();
+        const next = previous.catch(() => {}).then(task);
+        this._writeQueues[path] = next.finally(() => {
+            if (this._writeQueues[path] === next) delete this._writeQueues[path];
+        });
+        return next;
+    },
+
+    updateFileWithRetry: async function(path, mutateFn, message, maxRetries = this.DEFAULT_MAX_RETRIES) {
+        return this._enqueueFileUpdate(path, () => this._updateFileWithRetryNow(path, mutateFn, message, maxRetries));
+    },
+
+    _updateFileWithRetryNow: async function(path, mutateFn, message, maxRetries) {
+        let lastMessage = '';
         for (let attempt = 0; attempt < maxRetries; attempt++) {
             const current = await this.getFile(path);
+            if (!current.exists && current.status !== 404) {
+                lastMessage = `读取远端文件失败 (${current.status || 'network'})`;
+                await this._sleep(this._conflictBackoffMs(attempt));
+                continue;
+            }
             const oldContent = current.exists ? current.content : null;
             const newContent = mutateFn(oldContent);
             // 内容未变化则无需写入
@@ -171,13 +217,22 @@ const GitHubClient = {
             }
             const res = await this.putFile(path, newContent, message, current.sha || null);
             if (res.ok) return { ok: true };
-            // 409/422 通常是 sha 冲突，退避后重试
-            if (res.status === 409 || res.status === 422) {
-                await new Promise(r => setTimeout(r, 300 * Math.pow(2, attempt)));
+            lastMessage = res.message || `HTTP ${res.status}`;
+            // 409 / 部分 422 是 sha 冲突：重新读取最新 sha，再用 mutateFn 合并一次后写入。
+            if (this._isConflictLike(res)) {
+                await this._sleep(this._conflictBackoffMs(attempt));
                 continue;
             }
             return { ok: false, message: res.message };
         }
-        return { ok: false, message: '写入冲突，重试次数已用尽' };
+
+        // 最后再读一次：如果最新内容已经等于本次 mutate 期望值，说明别的重试/标签页已经写成功。
+        const latest = await this.getFile(path);
+        if (latest.exists) {
+            try {
+                if (mutateFn(latest.content) === latest.content) return { ok: true };
+            } catch (e) { /* ignore final verification errors */ }
+        }
+        return { ok: false, message: `写入冲突，已自动重试 ${maxRetries} 次仍未成功${lastMessage ? `（最后错误：${lastMessage}）` : ''}` };
     }
 };
