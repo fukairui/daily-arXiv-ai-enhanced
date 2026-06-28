@@ -231,10 +231,59 @@
 }
 
 .favorite-summary-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   font-size: 13px;
   font-weight: 650;
   color: var(--text-color);
+  cursor: pointer;
+  list-style: none;
+}
+
+.favorite-summary-title::-webkit-details-marker {
+  display: none;
+}
+
+.favorite-summary-title::before {
+  content: '▸';
+  color: var(--text-secondary);
+  font-size: 12px;
+  transition: transform 0.15s ease;
+}
+
+.favorite-summary-title span:first-child {
+  margin-right: auto;
+}
+
+.favorite-summary-block[open] .favorite-summary-title {
   margin-bottom: 8px;
+}
+
+.favorite-summary-block[open] .favorite-summary-title::before {
+  transform: rotate(90deg);
+}
+
+.favorite-summary-state {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.favorite-summary-content {
+  animation: favorite-summary-expand 0.16s ease-out;
+}
+
+@keyframes favorite-summary-expand {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .favorite-summary-input {

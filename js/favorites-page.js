@@ -357,14 +357,19 @@ function renderList() {
                 </div>
                 ${infoHtml}
                 <div class="fav-card-tags">${tagsHtml}</div>
-                <div class="favorite-summary-block">
-                    <div class="favorite-summary-title">简要摘要</div>
-                    <textarea class="favorite-summary-input" data-id="${escapeHtml(id)}" placeholder="暂无摘要，可自行补充...">${escapeHtml(summaryText)}</textarea>
-                    <div class="favorite-summary-actions">
-                        <button class="button save-summary-btn" data-id="${escapeHtml(id)}">保存摘要</button>
-                        <span class="summary-save-status" data-id="${escapeHtml(id)}"></span>
+                <details class="favorite-summary-block">
+                    <summary class="favorite-summary-title">
+                        <span>简要摘要</span>
+                        <span class="favorite-summary-state">${summaryText ? '已填写，点击展开编辑' : '暂无，点击补充'}</span>
+                    </summary>
+                    <div class="favorite-summary-content">
+                        <textarea class="favorite-summary-input" data-id="${escapeHtml(id)}" placeholder="暂无摘要，可自行补充...">${escapeHtml(summaryText)}</textarea>
+                        <div class="favorite-summary-actions">
+                            <button class="button save-summary-btn" data-id="${escapeHtml(id)}">保存摘要</button>
+                            <span class="summary-save-status" data-id="${escapeHtml(id)}"></span>
+                        </div>
                     </div>
-                </div>
+                </details>
                 <div class="manual-tag-editor" data-id="${escapeHtml(id)}">
                     <div class="manual-tag-input-wrap">
                         <input class="manual-tag-input" data-id="${escapeHtml(id)}" autocomplete="off" placeholder="添加研究方向 TAG，如 Semantic Identifier...">
