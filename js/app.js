@@ -972,6 +972,51 @@ function syncExistingFavoriteMetaFromPaper(paper) {
   Favorites._saveMeta(all);
 }
 
+function parseFavoriteRows(content) {
+  const rows = [];
+  if (!content) return rows;
+  content.split('\n').forEach(line => {
+    if (!line.trim()) return;
+    try { rows.push(JSON.parse(line)); } catch (e) { /* ignore malformed row */ }
+  });
+  return rows;
+}
+
+function favoriteMetaToRemoteRow(id, meta) {
+  return {
+    id,
+    title: meta.title || id,
+    date: meta.date || '',
+    authors: meta.authors || '',
+    categories: meta.categories || [],
+    details: meta.details || '',
+    is_ab_test: !!meta.is_ab_test,
+    is_industrial_paper: !!meta.is_industrial_paper,
+    affiliation_type: meta.affiliation_type || 'unknown',
+    org_display: meta.org_display || '',
+    industry_orgs: meta.industry_orgs || '',
+    code_url: meta.code_url || '',
+    code_stars: meta.code_stars || 0,
+    tags: Array.isArray(meta.tags) ? meta.tags : [],
+    summary: meta.summary || '',
+    has_deep: false,
+    favorited_at: new Date().toISOString(),
+  };
+}
+
+async function syncFavoriteToggleToRemote(id, meta, favored) {
+  if (!id || typeof GitHubClient === 'undefined' || !GitHubClient.hasToken()) return;
+  const res = await GitHubClient.updateFileWithRetry('data/favorites.jsonl', (old) => {
+    const rows = parseFavoriteRows(old);
+    const filtered = rows.filter(r => r.id !== id);
+    if (favored) filtered.push(favoriteMetaToRemoteRow(id, meta || {}));
+    return filtered.length ? filtered.map(r => JSON.stringify(r)).join('\n') + '\n' : '';
+  }, favored ? `favorites: add ${id}` : `favorites: remove ${id}`);
+  if (!res.ok) {
+    console.warn('收藏远端同步失败:', res.message || res);
+  }
+}
+
 function parseJsonlData(jsonlText, date) {
   const result = {};
   const lines = jsonlText.trim().split('\n');
@@ -1535,10 +1580,12 @@ function renderPapers() {
     if (favStar) {
       favStar.addEventListener('click', (e) => {
         e.stopPropagation();
-        const favored = Favorites.toggle(paper.id, buildFavoriteMetaFromPaper(paper));
+        const favoriteMeta = buildFavoriteMetaFromPaper(paper);
+        const favored = Favorites.toggle(paper.id, favoriteMeta);
         favStar.classList.toggle('favorited', favored);
         const svg = favStar.querySelector('svg');
         if (svg) svg.setAttribute('fill', favored ? 'currentColor' : 'none');
+        syncFavoriteToggleToRemote(paper.id, favoriteMeta, favored);
       });
     }
     
@@ -1698,8 +1745,10 @@ function showPaperDetails(paper, paperIndex) {
     };
     syncFavBtn();
     favoriteButton.onclick = () => {
-      Favorites.toggle(paper.id, buildFavoriteMetaFromPaper(paper));
+      const favoriteMeta = buildFavoriteMetaFromPaper(paper);
+      const favored = Favorites.toggle(paper.id, favoriteMeta);
       syncFavBtn();
+      syncFavoriteToggleToRemote(paper.id, favoriteMeta, favored);
     };
   }
   // ---------------------------
