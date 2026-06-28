@@ -46,8 +46,13 @@ async function restoreFromRemote() {
                     pdf: currentMeta.pdf || `https://arxiv.org/pdf/${row.id}`,
                     abs: currentMeta.abs || `https://arxiv.org/abs/${row.id}`,
                     categories: currentMeta.categories || [],
-                    tags: Array.isArray(row.tags) ? row.tags : (currentMeta.tags || []),
-                    summary: row.summary || currentMeta.summary || ''
+                    // 如果本机手动编辑过标签/摘要，则本机结果优先，避免刷新时被远端旧数据覆盖。
+                    tags: currentMeta.tagsEditedLocally
+                        ? (currentMeta.tags || [])
+                        : (Array.isArray(row.tags) ? row.tags : (currentMeta.tags || [])),
+                    summary: currentMeta.summaryEditedLocally
+                        ? (currentMeta.summary || '')
+                        : (row.summary || currentMeta.summary || '')
                 };
             }
         } catch (e) { /* ignore */ }
@@ -392,6 +397,8 @@ function setLocalPaperTags(id, tags) {
     const meta = Favorites.getMeta();
     meta[id] = meta[id] || { title: id, pdf: `https://arxiv.org/pdf/${id}`, abs: `https://arxiv.org/abs/${id}` };
     meta[id].tags = uniqueTags(tags);
+    meta[id].tagsEditedLocally = true;
+    meta[id].tagsEditedAt = new Date().toISOString();
     Favorites._saveMeta(meta);
 }
 
@@ -404,6 +411,8 @@ function setLocalPaperSummary(id, summary) {
     const meta = Favorites.getMeta();
     meta[id] = meta[id] || { title: id, pdf: `https://arxiv.org/pdf/${id}`, abs: `https://arxiv.org/abs/${id}` };
     meta[id].summary = (summary || '').trim();
+    meta[id].summaryEditedLocally = true;
+    meta[id].summaryEditedAt = new Date().toISOString();
     Favorites._saveMeta(meta);
 }
 
