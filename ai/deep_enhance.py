@@ -346,6 +346,9 @@ def _extract_json_object(text: str) -> dict:
 
     deepseek-reasoner 不支持 function/tool calling，因此这里用普通文本输出 JSON，
     再在本地解析。兼容 ```json ... ``` 代码块与前后带解释文本的情况。
+    LaTeX 公式中常出现 \sum \theta \mathcal 等非合法 JSON 转义，会触发
+    json.JSONDecodeError: Invalid \\escape。此处提供一个降级解析：把所有非合法
+    JSON 转义里的单反斜杠改写成双反斜杠后再次解析。
     """
     if not text:
         raise ValueError("empty model response")
@@ -353,14 +356,55 @@ def _extract_json_object(text: str) -> dict:
     # 优先提取 fenced json code block
     fenced = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text, re.IGNORECASE)
     if fenced:
-        return json.loads(fenced.group(1))
+        return _loads_json_lenient(fenced.group(1))
 
     # 否则提取第一个完整 JSON 对象范围
     start = text.find("{")
     end = text.rfind("}")
     if start == -1 or end == -1 or end <= start:
         raise ValueError("no JSON object found in model response")
-    return json.loads(text[start:end + 1])
+    return _loads_json_lenient(text[start:end + 1])
+
+
+def _loads_json_lenient(s: str) -> dict:
+    """先尝试标准 json.loads；失败时把 LaTeX 命令导致的非法/误判转义升级为 \\\\ 再重试。
+
+    痛点：模型在 markdown 里写 `$\\theta$`，序列化成 JSON 字符串时只写了 `\\theta`。
+    - `\\sum` `\\mathcal` 等：JSON 报 Invalid \\escape，需要升级为 `\\\\sum`。
+    - `\\theta` `\\to` `\\times`：JSON 把 `\\t` 当成 tab 转义，吞掉字母，需要识别"\\后跟字母"按 LaTeX 升级。
+    - `\\n` 后跟字母（如 `\\nabla`）同理，避免被当成换行。
+    """
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        pass
+
+    # 合法 JSON 转义（且不会和 LaTeX 命令冲突）：
+    # - \" \\ \/    始终视为合法
+    # - \b \f       视为合法（LaTeX 里这种命令极罕见）
+    # - \t \n \r    只有当后面不是字母时才视为合法（否则视为 LaTeX 命令）
+    # - \uXXXX      合法
+    legal_escape = re.compile(
+        r'\\(?:["\\/bf]|t(?![a-zA-Z])|n(?![a-zA-Z])|r(?![a-zA-Z])|u[0-9a-fA-F]{4})'
+    )
+    out_parts = []
+    i = 0
+    while i < len(s):
+        ch = s[i]
+        if ch == '\\' and i + 1 < len(s):
+            m = legal_escape.match(s, i)
+            if m:
+                out_parts.append(m.group(0))
+                i = m.end()
+                continue
+            # 非法/会破坏 LaTeX 的转义：把单反斜杠变成双反斜杠
+            out_parts.append('\\\\')
+            i += 1
+            continue
+        out_parts.append(ch)
+        i += 1
+    fixed = ''.join(out_parts)
+    return json.loads(fixed)
 
 
 def _normalize_deep_result(raw: dict) -> dict:
