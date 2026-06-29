@@ -782,6 +782,21 @@ function renderMarkdownInto(el, mdText) {
     }
     // 链接默认新标签打开
     el.querySelectorAll('a[href^="http"]').forEach(a => a.setAttribute('target', '_blank'));
+    // 支持在 alt 文本里写宽度，例如 ![Figure 2: 框架图|400](url) 或 ![标题|60%](url)
+    // 渲染后把 |N 部分转换成 width 内联样式，并把 alt 还原成不含尺寸的文本。
+    el.querySelectorAll('img').forEach(img => {
+        const rawAlt = img.getAttribute('alt') || '';
+        const m = rawAlt.match(/^(.*?)\|\s*(\d+(?:\.\d+)?)(px|%|em|rem)?\s*$/);
+        if (m) {
+            const cleanAlt = m[1].trim();
+            const num = m[2];
+            const unit = m[3] || 'px';
+            img.style.width = `${num}${unit}`;
+            // 兼容超过 max-width 的情况，让用户写的尺寸真正生效
+            img.style.maxWidth = '100%';
+            img.setAttribute('alt', cleanAlt);
+        }
+    });
     // 图片点击放大查看（lightbox）
     el.querySelectorAll('img').forEach(img => {
         if (img.dataset.lightboxBound === '1') return;
