@@ -3,42 +3,51 @@
   "title": "Token Factory: Efficiently Integrating Diverse Signals into Large Recommendation Models",
   "model": "deepseek-reasoner",
   "language": "Chinese",
-  "analyzed_at": "2026-06-29T11:12:39.044302+00:00",
+  "analyzed_at": "2026-06-29T13:40:23.510900+00:00",
   "tags": [
     "Industrial Recommender Systems",
-    "Model-Centric Scaling"
+    "Ranking"
   ],
   "new_tags": [],
-  "deep": {
-    "background": "基于Transformer的大型推荐模型（LRM）在工业界展现出巨大潜力。现有方法（如PLUM）通过文本化方式将语义ID、稠密特征等传统信号输入LRM，导致prompt长度剧增（例如每个历史观看项目占用12个token）、内存开销大、计算成本高。同时，此类文本化表示往往带来注意力稀疏和大量未利用token的问题。",
-    "problem": "如何将异质的传统信号（稠密特征、稀疏特征、序列特征）高效地整合到Transformer架构的LRM中，避免prompt长度爆炸和过高的计算/内存开销，同时保持或提升模型在排名和检索任务中的性能？",
-    "motivation": "直接文本化传统信号会线性放大prompt长度，且大量token在注意力机制中被浪费（注意力可视化显示文本SID模型中近半token未得到有效关注）。需要一种能够将异构特征压缩为固定数量、可直接嵌入模型语义空间的表示方法，既保留关键信息又缩短prompt。",
-    "method_overview": "Token Factory包含多个Token Maker模块，每个模块将一组输入特征（如稠密值、稀疏索引、嵌入向量）通过可微映射转换成指定数量的软令牌（soft tokens）。在视频推荐场景中，设计了三个Token Maker：WH Token Maker（用户观看历史）、Query Token Maker（用户特征）、Candidate Token Maker（候选视频特征）。软令牌与文本令牌交错放置到prompt中，并支持前缀缓存。软令牌的维度与模型隐藏维度一致，可直接作为Transformer的输入嵌入。",
-    "method_details": "一个Token Maker的输入为经过变换（归一化、嵌入查找等）的特征拼接向量E_input。通过函数G（通常为MLP）将其映射为N×d_model的向量，再reshape为N个软令牌。N为超参数，控制信息容量与计算代价的平衡（例如简单特征N=1，长序列压缩为N=10）。支持序列压缩：MLP压缩（将长度为N的序列映射到M个token）或注意力池化（每K项聚合为一个token）。软令牌的生成参数与LRM端到端联合训练。在排名任务中，每个历史项从12个文本token压缩为1个软令牌，prompt长度从1536降至480。",
-    "experiments": "基于PLUM框架（排名用110M MoE Gemini编码器，检索用210M MoE Gemini解码器）在YouTube首页推荐场景进行实验。排名任务基线：每个观看历史项含8个SID文本token + 3个稠密特征文本token + 1个频道名token共12 token，prompt上限1536。处理：每个观看历史项变为1个软令牌，prompt 480 token（含200个历史项+候选视频标题+用户信息）。检索任务基线：5 token/项（SID哈希+频道名哈希+稠密特征），prompt上限768；处理：1软令牌/项，prompt 256。对比包括相同batch size和增大batch size的AUC、Recall@10及在线指标。消融研究考察软令牌与SID文本表示、前端特征去除、序列压缩长度的影响。",
-    "results_analysis": "排名任务：相同batch size下，Token Factory起初AUC略低但约1.5M步后追上基线并持续持平；增大batch size 200%后Token Factory显著超越基线。训练速度提升约200%。检索任务：离线Recall@10提升+2.0%；在线Unique Impressions提升+16.8%，最新一天视频的Unique Impressions暴增+67.1%；满意观看人数和满意观看时间分别+0.04%和+0.05%。消融发现：在固定480 token budget下，软令牌可容纳200个历史项而文本SID因长度过长被截断，导致soft token明显更优；在软令牌中额外加入传统特征仍能提升AUC。将历史长度从200扩展到500（额外压缩为30个软令牌）获得+0.08% AUC提升。注意力可视化显示软令牌获得更均匀、更密集的注意力分布，而文本SID模型存在大量空闲token。",
-    "conclusion": "Token Factory通过将传统信号转换为软令牌，在工业级LRM中实现了高效的异构特征融合。它大幅缩短prompt长度、降低计算成本、提升训练速度，同时在排名和检索任务中保持甚至提升模型质量。软令牌表示使得模型注意力更加均衡，充分提升了模型容量利用率。",
-    "innovations": [
-      "提出软令牌（soft token）作为新模态，将异质传统信号直接嵌入Transformer语义空间，避免文本化导致的prompt膨胀。",
-      "设计Token Maker架构，通过可学习MLP将任意数量、多种类型的特征映射为固定数量（N）的软令牌，实现确定性prompt长度。",
-      "支持序列压缩（MLP压缩、注意力池化），可将长用户历史压缩为少量软令牌，在有限上下文窗口中容纳更长的行为序列。",
-      "采用端到端联合训练，使软令牌适配下游任务，并利用前缀缓存减少推理开销。",
-      "通过注意力可视化证明软令牌比文本SID获得更密集、更平衡的注意力分布，避免模型容量浪费。"
-    ],
-    "limitations": [
-      "软令牌不具备可解释性，不能直接映射回具体特征值，调试困难。",
-      "Token Maker的随机初始化导致初期训练质量低于基线，需要一定的训练步数才能追赶。",
-      "实验仅在PLUM模型（基于Gemini）上验证，其泛化到其他LRM架构（如HSTU）尚待检验。",
-      "软令牌的数量N需手工设定，不同特征类型可能需要不同的N，引入额外调参成本。",
-      "压缩长序列时可能丢失细粒度交互信息（虽然实验显示提升，但极端场景仍有风险）。"
-    ],
-    "future_work": [
-      "探索更复杂的G函数（如轻量Transformer、交叉注意力）以提升软令牌的特征表达能力。",
-      "将Token Factory扩展到多任务学习、跨域推荐等更复杂的场景。",
-      "研究软令牌的可解释性，例如通过解码或归因分析追溯原始特征的影响。",
-      "结合其他token压缩方法（如LONGER的全局token）进一步提升效率。",
-      "在更多工业规模的LRM（如HSTU、TokenMixer）中验证框架的有效性。"
-    ],
-    "related_comparison": "与文本化方法（PLUM）相比，Token Factory用软令牌替代文本SID+稠密特征，显著缩短prompt并提高训练效率。与TokenRec、SEATER等基于语义ID的方法相比，Token Factory不仅处理ID，还统一融合稠密、稀疏和序列特征。与LONGER、GenRec等压缩方法相比，Token Factory在压缩序列时同时携带额外特征信息，而非仅保留SID。与HSTU等架构改进方法互补，Token Factory专注于输入表示的优化。"
-  }
+  "markdown": "## 1. 核心问题\n\n现代工业推荐系统广泛采用基于 Transformer 的大型推荐模型 (LRM)，这类模型通常将物品表示为文本化的语义 ID (Semantic ID, SID) 并结合少量稠密特征以文本形式输入。然而，传统的稠密、稀疏信号（如观看时长、用户年龄、设备信息等）在文本化后会急剧增加 prompt 长度，导致内存开销与计算延迟显著上升。论文提出的 **Token Factory** 框架旨在将这些异构的传统信号高效地转换为 **软令牌 (soft token)**——直接在模型嵌入空间中的连续表示——从而在不损失信息的前提下大幅压缩 prompt 长度，提升训练与推理效率，并维持甚至提升模型质量。\n\n## 2. 相关工作\n\n**大型推荐模型 (LRM)**：现有工作如 HSTU、PLUM、SEATER、TokenRec 等主要关注模型架构缩放或物品表示优化，但普遍依赖将辅助特征文本化后拼接进 prompt。Token Factory 则将所有异构信号统一映射为软令牌，避免文本化带来的长度爆炸。\n\n**令牌压缩 (Token Compression)**：LONGER、GenRec、HyMiRec 等方法通过合并或投影来缩减用户序列的令牌数；但它们通常只压缩物品 ID 而忽略与每件物品关联的交互特征。Token Factory 允许在压缩过程中将各种特征融合进一个软令牌，保留关键信息。\n\n## 3. 方法概览\n\nToken Factory 的核心思路是：为每类传统信号设计一个 **Token Maker**，该模块将一组异构特征（稠密、稀疏、序列）通过可微变换（如 MLP）映射为固定数量（$N$）的软令牌。这些软令牌被直接插入 prompt 的指定位置，与文本令牌交错，作为新模态供下游 Transformer 处理。\n\n系统包含三类 Token Maker：\n- **WH Token Maker**：处理用户观看历史中每个物品的交互信号（SID、频道名、客户端信息、观看时长等），每个物品输出 1 个软令牌。\n- **Query Token Maker**：整合用户级特征，输出固定数量的软令牌。\n- **Candidate Token Maker**：整合候选物品特征，输出固定数量的软令牌。\n\n由于 query 和用户特征在一次请求内保持不变，它们的软令牌可以预先计算并缓存（prefix caching），显著降低推理延迟。\n\n<img src=\"https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page02.png\" alt=\"Page 2: Token Factory 架构概览\" style=\"width:60%;\">\n\n*图注：Token Factory 的整体架构。传统信号经过 Token Maker 生成软令牌，与文本令牌混合后送入 LRM。*\n\n## 4. 方法细节\n\n### 4.1 Token Maker 形式化定义\n\n设输入特征集合 $F_{\\text{input}} = [f_1, f_2, \\ldots, f_n]$，每个特征经对应变换函数 $t_i$ 处理（如归一化、embedding lookup），得到 $E_{\\text{input}} = \\text{Concat}(t_1(f_1), t_2(f_2), \\ldots, t_n(f_n))$。然后通过可微映射 $G$ 将 $E_{\\text{input}}$ 投影为 $N \\times d_{\\text{model}}$ 的向量，再 reshape 为 $N$ 个维度为 $d_{\\text{model}}$ 的软令牌：\n\n$$\nT_{\\text{output}} = G(E_{\\text{input}}), \\quad T_{\\text{output}} \\in \\mathbb{R}^{N \\times d_{\\text{model}}}\n$$\n\n$G$ 可以是简单的 MLP，也可以是更复杂的网络，与 LRM 端到端联合训练。$N$ 的选择平衡容量与延迟：简单特征取 $N=1$，长历史序列可压缩到较小固定预算（如 $N=10$）。\n\n### 4.2 序列压缩\n\n对于超长用户历史（如数千次观看），可以将每个物品软令牌组成的序列进一步压缩：\n- **MLP 压缩**：在序列维度上应用 MLP，将长度从 $N$ 降为 $M$。\n- **Attention Pooling**：借鉴 LONGER，对每 $K$ 个物品用轻量 Transformer 和注意力池化生成一个软令牌，压缩比 $1/K$。\n\n### 4.3 Prompt 演变\n\n**原始文本化 prompt**：每个历史物品消耗 12 个文本令牌（8 个 SID 子令牌 + 频道 + 3 个稠密特征），200 个物品即 2400+ 令牌，常截断至 1536。\n\n**Token Factory prompt**：每个历史物品仅对应 1 个软令牌，原 12 个令牌压缩为 1，同时保留视频标题等文本令牌以利用 LLM 的语言理解能力。整个 prompt 长度降为 480 令牌，且长度严格固定。\n\n## 5. 训练与部署优化\n\n- **Prefix caching**：query 和用户特征生成的软令牌在批内候选物品间共享，只需计算一次。\n- **训练加速**：prompt 长度缩短至约 30%，相同 batch size 下训练速度提升约 200%。\n- **更大 batch size**：释放的内存可用于增大 batch size，进一步提升模型质量（如图 5 所示）。\n\n## 6. 实验设置\n\n实验基于 Google 的 PLUM 框架，使用 110M MoE（ranking）和 210M MoE（retrieval）的 Gemini 派生模型。\n\n**Ranking 任务**（CTR 预测）：\n- Baseline：文本化 SID + 稠密特征，每个历史物品 12 令牌，prompt 长度 1536（含 200 个历史物品）。\n- Treatment：Token Factory 将每个历史物品转换为 1 个软令牌，prompt 长度 480。\n\n**Generative Retrieval 任务**（下一视频 SID 预测）：\n- Baseline：文本化 SID + 稠密特征，每个历史物品 5 令牌，prompt 长度 768。\n- Treatment：Token Factory，prompt 长度 256（含 200 个历史物品）。\n\n## 7. 实验结果\n\n### 7.1 Ranking 任务\n\n**相同 batch size**：Token Factory 初始 AUC 略低，但在 150 万步后追上 baseline 并保持持平（图 4）。\n\n**增大 batch size 至 200%**：Token Factory 从早期就超越 baseline，效率提升允许更大 batch 从而带来质量提升（图 5）。\n\n### 7.2 Generative Retrieval 任务\n\n| 指标 | 改进幅度 |\n|------|---------|\n| Recall@10 (离线) | +2.0% |\n| Unique Impressions (在线) | +16.8% |\n| Unique Impressions (1 天新鲜视频) | +67.1% |\n| Satisfied Watchers | +0.04% |\n| Satisfied Watch Time | +0.05% |\n\n**表 1：Token Factory 在检索阶段的效果。** 新鲜视频的曝光量大幅提升，且用户满意度未下降，说明软令牌表示更好地保留了完整信号，实现了更有效的探索。\n\n### 7.3 消融研究（Ranking 任务）\n\n固定 prompt 长度 480 令牌、batch 32k，比较不同输入构成：\n- Baseline (软令牌 + 全特征) vs WH_SID (文本 SID + 全特征)：无明显差距。\n- NO_FEAT (软令牌 + 仅历史物品特征) vs WH_SID_NO_FEAT (文本 SID + 仅历史物品特征)：软令牌显著更优，因为文本 SID 在 480 长度下会被截断，而软令牌可以容纳全部 200 个物品。\n- NO_FEAT vs NO_FEAT_STRICT (软令牌 + 仅 SID 和频道)：加入更多特征仍有助于 CTR 预测。\n\n**更长历史压缩**：将历史从 200 扩展到 500 物品，通过压缩 300 个额外物品为 30 个软令牌，AUC 提升 +0.08%。\n\n### 7.4 注意力可视化分析\n\n附录 A 展示了注意力分数热力图。文本 SID 的 prompt 中近一半子令牌几乎不被任何注意力头关注（白色区域）；而软令牌的每个令牌都至少被某些注意力头关注，注意力分布更均匀、更密集。这表明软令牌有效缓解了冗余表示问题，使模型容量被更充分地利用。\n\n<img src=\"https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page07.png\" alt=\"Page 7: 注意力热力图对比\" style=\"width:60%;\">\n\n*图注：最大/平均注意力分数热力图。软令牌（上）比文本 SID（下）产生更密集、更分布式的注意力模式。*\n\n## 8. 创新点与亮点\n\n1. **软令牌机制**：将异构传统信号直接映射到 LLM 嵌入空间，作为新模态，避免文本化导致的 prompt 长度爆炸。\n2. **Token Maker 模块化设计**：支持任意类型的输入特征，输出固定数量的软令牌，长度可确定性控制，便于缓存优化。\n3. **端到端联合训练**：软令牌生成器与 LRM 一起训练，自动对齐到 LLM 语义空间和任务目标。\n4. **显著效率提升**：训练速度 2 倍提升，通过 prefix caching 降低推理延迟，且能够利用更大 batch 进一步提升质量。\n5. **新鲜视频曝光大幅提升**：在在线检索任务中，1 天新鲜视频的独特曝光量增加 67.1%，表明软令牌表示保留了更全面的特征，有助于探索。\n\n## 9. 局限性与未来工作\n\n- 当前实验仅基于 PLUM 框架，在其他 LRM 架构（如 HSTU）上的泛化性有待验证。\n- 软令牌的可解释性低于文本令牌，可能不利于调试和特征质量分析。\n- 对软令牌的序列压缩方法（MLP / attention pooling）未进行充分比较，最优压缩策略尚待探索。\n- 论文未讨论对用户隐私的影响（软令牌可能隐式编码敏感特征）。\n\n## 10. 与相关工作的对比\n\n- 相比 PLUM、SEATER 等仅使用文本化 SID 的方法，Token Factory 额外融入了大量稠密、稀疏特征且不增加序列长度。\n- 相比 LONGER、GenRec 等令牌压缩方法，Token Factory 在压缩的同时保留了与每个物品关联的丰富交互特征，而非仅压缩物品 ID。\n- 相比 TokenMixer / RankMixer 等改进 token 生成的架构，Token Factory 专注于将传统信号作为独立的软令牌模态引入，可与其正交结合。\n\n## 11. 评价与启示\n\nToken Factory 为工业推荐系统中传统信号与预训练 LLM 的高效融合提供了一种实用且优雅的解决方案。其核心洞察是：不应将所有特征强行文本化，而应利用 LLM 的多模态能力，通过可学习的投影层将异构连续信号直接嵌入模型空间。该工作有力地证明了“注入更多原始信号”而非“精简信号”在 LRM 时代仍能带来提升，关键在于表示效率。对于从业者，Token Factory 将 prompt 长度减少至 1/3 且训练加速 2 倍的绝对收益极具吸引力。未来可探索更复杂的 Token Maker 结构（如交叉注意力）、跨任务共享软令牌，以及在隐私合规下的信号集成。",
+  "figures": [
+    {
+      "label": "Page 1",
+      "caption": "Page 1 of the PDF (auto-rendered fallback because no figure-tagged HTML was found).",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page01.png"
+    },
+    {
+      "label": "Page 2",
+      "caption": "Page 2 of the PDF (auto-rendered fallback because no figure-tagged HTML was found).",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page02.png"
+    },
+    {
+      "label": "Page 3",
+      "caption": "Page 3 of the PDF (auto-rendered fallback because no figure-tagged HTML was found).",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page03.png"
+    },
+    {
+      "label": "Page 5",
+      "caption": "Page 5 of the PDF (auto-rendered fallback because no figure-tagged HTML was found).",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page05.png"
+    },
+    {
+      "label": "Page 6",
+      "caption": "Page 6 of the PDF (auto-rendered fallback because no figure-tagged HTML was found).",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page06.png"
+    },
+    {
+      "label": "Page 7",
+      "caption": "Page 7 of the PDF (auto-rendered fallback because no figure-tagged HTML was found).",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page07.png"
+    }
+  ],
+  "figures_source": "pdf_screenshot",
+  "summary_zh": "Token Factory 提出将传统稠密/稀疏特征转换为软令牌（soft tokens）作为新模态，与文本令牌混合输入 LLM 驱动的推荐模型，从而实现 prompt 压缩、训练加速与质量提升，在 YouTube 主页检索上新鲜视频曝光增加 67%。",
+  "authors": "Xilun Chen, Shao-Chuan Wang, Baykal Cakici, Lukasz Heldt, Lichan Hong, Raghu Keshavan, Aniruddh Nath, Li Wei, Xinyang Yi",
+  "org_display": "Google",
+  "industry_orgs": "Google",
+  "affiliation_type": "industry",
+  "is_industrial_paper": true,
+  "is_ab_test": true
 }
