@@ -3,49 +3,52 @@
   "title": "UniFormer: Efficient and Unified Model-Centric Scaling for Industrial Recommendation",
   "model": "deepseek-reasoner",
   "language": "Chinese",
-  "analyzed_at": "2026-06-26T16:10:24.750164+00:00",
-  "tags": [],
-  "new_tags": [
+  "analyzed_at": "2026-06-29T13:41:28.254136+00:00",
+  "tags": [
+    "Industrial Recommender Systems",
+    "Model-Centric Scaling",
+    "Unified Feature and Task Modeling"
+  ],
+  "new_tags": [],
+  "markdown": "## 1. 核心问题\n\n工业推荐系统通常包含行为建模、特征交互、任务建模三个独立模块，传统方法采用组件级缩放（component-centric scaling）分别扩展各模块容量，但未能实现跨模块协同缩放，导致资源利用不足且难以充分释放模型能力。近期工作如HyFormer、OneTrans开始探索特征空间内的跨模块协同缩放，但忽略了任务空间的建模。本文提出**UniFormer**，一个高效的统一模型中心缩放框架，将整个建模空间分解为特征空间和任务空间，分别用Feature-space Interaction Module (FIM)和Task-space Interaction Module (TIM)建模，实现行为、特征、任务的联合缩放。\n\n## 2. 相关工作\n\n- **Pre-scaling模型**：DIN、DIEN、DeepFM、DCN、MMoE、PLE等，各自独立优化模块，DNN参数少。\n- **Scaling模型**：LONGER、STCA（行为序列缩放）、HHFT、RankMixer（特征交互缩放）、SMES（任务缩放）。OneTrans、TokenFormer尝试统一序列和非序列特征，但局限于特征空间。HyFormer、MixFormer进一步优化效率，但仍未纳入任务空间。\n\n## 3. 方法概览\n\nUniFormer包含两个核心部分：Tokenization和Unified Interaction Block。Tokenization将输入特征转换为三类token：Seq-tokens（短期/长期/搜索行为）、NonSeq-tokens（非序列特征分组）、Task-tokens（任务特征）。Unified Interaction Block由$M$层FIM和$N$层TIM堆叠而成。FIM利用多序列交叉注意力（multi-sequence cross-attention）和自注意力分别建模序列与非序列交互；TIM通过交叉注意力和自注意力建模特征-任务和任务-任务交互。整体采用标准Transformer风格算子（Attention + FFN），支持灵活参数缩放。\n\n<img src=\"https://arxiv.org/html/2606.27058v1/x1.png\" alt=\"Figure 2: UniFormer总体架构\" style=\"width:60%;\">\n\n*图2展示了UniFormer的完整结构，包括Tokenization、FIM和TIM的堆叠，以及多视图FFN的分组。*\n\n## 4. 方法细节\n\n### 4.1 Tokenization\n- **Sequential Features**：分为item-independent（短期、长期压缩表示）和item-dependent（基于搜索的序列）。对独立行为保留序列结构，每个元素拼接到统一隐藏空间；对依赖行为使用目标注意力聚合为单个token。\n- **Non-sequential Features**：按语义分组为item-independent和item-dependent两组，各自拼接后经SwiGLU投影为$\\mathbb{R}^{q \\times d_{\\text{model}}}$。\n- **Task Features**：每个任务的特征（任务ID、偏置）拼接为一个token，投影为$\\mathbb{R}^{t \\times d_{\\text{model}}}$。\n\n### 4.2 Feature-space Interaction Module (FIM)\n- **Sequential-oriented Interaction**：采用多序列交叉注意力，每个行为序列分别与当前query做交叉注意力，然后通过独立的S-FFN增强。最后用自适应融合（全局或个性化）合并不同序列的输出。\n- **Non-Sequential-oriented Interaction**：将交叉注意力输出与前一层query拼接，通过自注意力（SA）和NS-FFN建模特征交互。采用层间分割策略（split ratio $\\beta^{(l)}$）控制交叉和自注意力令牌比例。\n\n### 4.3 Task-space Interaction Module (TIM)\n- **Feature-oriented Interaction**：以任务token为query，对FIM输出的高维特征做交叉注意力（lazy KV共享），实现任务感知的特征聚合。\n- **Task-oriented Interaction**：自注意力+T-FFN建模任务间交互，输出任务特定表示。\n\n### 4.4 缩放机制\n- 多视图FFN（S-FFN、NS-FFN、T-FFN）分别对应不同组件，支持独立调整容量，实现平衡的参数量缩放。\n\n## 5. 训练与部署优化\n\n**训练优化**：\n- 用户级公共压缩：同一用户行为特征只处理一次，通过索引映射到多个样本。\n- 变长FlashAttention：消除padding冗余。\n- BF16混合精度训练。\n\n**推理优化**：\n- 用户-物品解耦：将非序列特征分为item-independent和item-dependent组，item-independent部分可在请求级计算一次并复用；通过注意力掩码消除用户侧到物品侧的注意力，进一步加速。\n\n## 6. 实验设置\n\n- **数据集**：快手主站短视频场景，日活4亿+，每日500亿交互日志。四个任务：Effective-view、Long-view、Like、Follow。评估指标：GAUC（用户级加权AUC）。\n- **Baselines**：SIM+DCN、SIM+HoME、SIM+RankMixer、HyFormer、MixFormer。\n- **实现**：3层UniFormer，$d_{\\text{head}}=1280$，AdamW优化器，学习率1e-3，批次大小2048。\n\n## 7. 实验结果\n\n**离线GAUC**（表1）：\n\n| Model | Effective-view GAUC | Impr. | Like GAUC | Impr. | #Params |\n|-------|---------------------|-------|-----------|-------|---------|\n| SIM+DCN | 0.7418 | - | 0.8486 | - | 115.8M |\n| SIM+HoME | 0.7424 | +0.08% | 0.8494 | +0.09% | 114.8M |\n| SIM+RankMixer | 0.7443 | +0.34% | 0.8507 | +0.25% | 492.0M |\n| HyFormer | 0.7447 | +0.39% | 0.8512 | +0.31% | 496.5M |\n| MixFormer | 0.7450 | +0.43% | 0.8514 | +0.33% | 489.4M |\n| **UniFormer** | **0.7457** | **+0.53%** | **0.8531** | **+0.53%** | 516.0M |\n| **UniFormer-Large** | **0.7465** | **+0.63%** | **0.8538** | **+0.61%** | 995.3M |\n\nUniFormer在所有任务上优于最强baseline MixFormer，且进一步缩放（Large）带来额外提升。\n\n**消融实验**（图3）：替换多序列交叉注意力为共享交叉注意力（w/o Multi-seq CA）、移除Interaction Enhancement（w/o IE）、移除TIM、替换S-FFN/NS-FFN为共享FFN均导致GAUC下降，证实各组件的有效性。\n\n<img src=\"https://arxiv.org/html/2606.27058v1/x2.png\" alt=\"Figure 3: 消融实验\" style=\"width:60%;\">\n\n*图3显示移除多序列交叉注意力或专用FFN在Like任务上drop最明显，说明预防偏好坍塌和参数缩放的重要性。*\n\n**缩放规律**（图4）：随模型参数量增加，GAUC增益持续增长，未出现饱和，验证模型中心缩放的有效性。\n\n<img src=\"https://arxiv.org/html/2606.27058v1/x3.png\" alt=\"Figure 4: 缩放曲线\" style=\"width:60%;\">\n\n*图4展示了UniFormer在Effective-view和Like任务上清晰的缩放规律，参数从0.1B增加到1B时增益持续上升。*\n\n**在线A/B测试**（表2）：在快手和快手极速版上7天A/B测试，UniFormer在App停留时长、观看时长、点赞、评论等指标上均有显著提升（如观看时长提升+0.729%/+1.113%）。推理效率：用户-物品解耦使QPS提升48%。\n\n## 8. 创新点与亮点\n\n1. **范式转变**：从组件中心缩放转向模型中心缩放，首次将任务空间纳入统一缩放框架。\n2. **多序列交叉注意力**：分别建模异构行为序列，避免偏好坍塌。\n3. **语义分组tokenization**：实现用户-物品解耦，显著降低推理开销。\n4. **多视图FFN**：支持组件间的灵活参数分配，平衡容量扩展。\n5. **系统级优化**：用户压缩、变长FlashAttention、BF16训练，保证工业可部署性。\n\n## 9. 局限性与未来工作\n\n- 当前FIM和TIM的层数固定，未来可探索自适应层分配。\n- 对长序列的建模虽通过压缩表示，但可能损失细粒度信息。\n- 未与其他生成式推荐范式（如序列决策）结合。\n- 在线部署的稳定性细节未完全展开。\n\n## 10. 与相关工作的对比\n\n| Method | Behavior Sequence | Feature Interaction | Task Modeling | Scaling Paradigm |\n|--------|-------------------|---------------------|---------------|------------------|\n| SIM+DCN | Yes | Yes (DCN) | No | Component-centric |\n| SIM+RankMixer | Yes | Yes (Token-mixing) | No | Component-centric |\n| HyFormer/MixFormer | Yes | Yes (unified feature) | No | Feature-space co-scaling |\n| **UniFormer** | **Yes** | **Yes (FIM)** | **Yes (TIM)** | **Model-centric co-scaling** |\n\n## 11. 评价与启示\n\nUniFormer通过解耦特征和任务空间，并用标准化Transformer算子构建统一框架，使得模型能够高效缩放。其实践价值在于：即使在大规模工业场景下，模型中心缩放依然能带来持续增益，且通过语义分组和lazy KV设计保证了效率。对后续研究的重要启示：推荐系统的缩放不应局限于单一空间，任务空间的统一建模可能是进一步提升天花板的突破口。",
+  "figures": [
     {
-      "name": "Model-Centric Scaling",
-      "desc": "在推荐系统中统一扩展多个建模组件（行为、交互、任务）的范式。"
+      "label": "Figure 1",
+      "caption": "Figure 1 . Comparison of representative scaling methods. (a)-(c) present the component-centric scaling paradigm; (d)-(e) jointly model sequential behavior and feature interaction within the feature space; (f) Our approach proposes a unified co-scaling framework, enabling efficient co-scaling across sequential behaviors, non-sequence features, and tasks.",
+      "src": "https://arxiv.org/html/2606.27058v1/figure/model_compa.png"
     },
     {
-      "name": "Industrial Recommender Systems",
-      "desc": "针对大规模生产环境下的推荐系统设计与优化方法。"
+      "label": "Figure 2",
+      "caption": "Figure 2 . Overall architecture of UniFormer , which consists of two core components: tokenization and the unified interaction block. The unified interaction block is composed of stacked Feature-space Interaction Modules (FIMs) and Task-space Interaction Modules (TIMs). FIM takes tokenized sequential and non-sequential features as input and captures feature-space interactions through attention and FFNs layers. TIM further takes the high-order representations produced by FIM together with tokenized task features, and adopts the same standardized operators to capture task-feature and inter-task ",
+      "src": "https://arxiv.org/html/2606.27058v1/x1.png"
     },
     {
-      "name": "Unified Feature and Task Modeling",
-      "desc": "同时建模特征空间和任务空间的交互与缩放，实现多目标联合优化。"
+      "label": "Figure 3",
+      "caption": "Figure 3 . Ablation Study of UniFormer on the Kuaishou industrial dataset over the Effective-view and Like tasks.",
+      "src": "https://arxiv.org/html/2606.27058v1/x2.png"
+    },
+    {
+      "label": "Figure 4",
+      "caption": "Figure 4 . Scaling laws between GAUC gain and model parameters. The x-axis uses a logarithmic scale.",
+      "src": "https://arxiv.org/html/2606.27058v1/x3.png"
+    },
+    {
+      "label": "Figure 5",
+      "caption": "Figure 5 . Visualization of attention patterns under different tokenization.",
+      "src": "https://arxiv.org/html/2606.27058v1/x4.png"
+    },
+    {
+      "label": "Figure 6",
+      "caption": "Figure 6 . Visualization of attention distributions of feature-task relationship.",
+      "src": "https://arxiv.org/html/2606.27058v1/x5.png"
     }
   ],
-  "deep": {
-    "background": "工业推荐系统通常由嵌入层、行为建模模块、特征交互模块和任务建模模块组成，这些模块独立设计，导致架构碎片化。近年来，大规模语言模型在参数扩展方面取得显著成功，启发了推荐系统向扩展范式演进。现有方法多采用组件中心扩展（如单独扩展行为建模或特征交互），或仅聚焦于特征空间的跨模块联合扩展（如HyFormer、MixFormer），而忽略了任务空间的统一扩展。",
-    "problem": "如何在工业推荐系统中实现高效且统一的模型中心扩展，同时满足大规模特征与任务、高并发低延迟的在线服务需求、防止偏好崩溃（preference collapse）以及支持灵活可扩展的参数分配。",
-    "motivation": "组件中心扩展限制了计算资源的有效利用，且无法完全发挥整体扩展的收益。现有的跨模块联合扩展方法仍局限于特征空间，未将任务建模纳入统一扩展框架。因此，需要一种从组件中心扩展转向模型中心扩展的范式，以高效地联合扩展行为建模、特征交互和任务建模三个核心组件。",
-    "method_overview": "UniFormer提出将整体建模空间解耦为特征空间和任务空间，分别由堆叠的特征空间交互模块（FIM）和任务空间交互模块（TIM）建模。通过基于语义的标记化方案实现用户-物品解耦，支持请求级推理加速；采用多序列交叉注意力独立捕获异质行为模式以防止偏好崩溃；引入多视图FFN支持不同建模组件的灵活可扩展参数分配。",
-    "method_details": "标记化层：将序列特征（短时、长时、搜索行为）与任务无关/相关的非序列特征分别分组并投影为统一隐空间，任务特征也独立标记。FIM包含序列导向交互（多序列交叉注意力，各行为序列独立KV并共享跨层KV）和非序列导向交互（自注意力增强，后接特征特定的NS-FFN）。TIM包含特征导向交互（将FIM输出的高阶表示通过交叉注意力融合任务特征）和任务导向交互（自注意力+任务特定T-FFN）。训练优化采用用户级公共压缩、变长FlashAttention、BF16混合精度；推理通过用户-物品解耦和注意力掩码实现请求级加速。",
-    "experiments": "在快手主站及快手极速版两个生产场景上进行离线评估和在线A/B测试。离线数据集包含超过4亿日活用户的交互日志，评估四个任务（有效观看、长观看、点赞、关注），采用GAUC指标。对比基线包括SIM+DCN、SIM+HoME、SIM+RankMixer、HyFormer、MixFormer。在线A/B测试持续7天，5%流量部署，评估停留时长、观看时长、点赞、评论等指标。",
-    "results_analysis": "UniFormer在所有任务上GAUC显著优于最强基线MixFormer，例如Effective-view提升+0.10%（相对0.53% vs MixFormer 0.43%）；UniFormer-Large进一步提升。消融实验表明移除多序列交叉注意力、交互增强、TIM、S-FFN、NS-FFN均导致性能下降，其中移除S-FFN/NS-FFN下降最明显。缩放分析显示UniFormer遵循清晰的缩放定律，参数增加持续提升性能。可视化分析表明语义标记化比全局标记化具有更多样化的注意力模式，TIM中不同任务自适应关注不同特征。在线测试中，快手极速版App停留时长提升+0.260%，观看时长提升+1.113%；快手主站也取得一致提升。推理优化实现48% QPS提升而无显著GAUC损失。",
-    "conclusion": "UniFormer通过统一特征空间和任务空间的联合扩展，实现了模型中心扩展范式，在工业推荐系统中验证了其高效性和有效性。多视图FFN支持平衡的参数分配，消融实验和缩放分析证实了设计合理性。在线A/B测试表明用户参与度和交互指标显著提升，同时推理效率得到实质改善。",
-    "innovations": [
-      "提出从组件中心扩展到模型中心扩展的范式转变，并系统解析了高效统一扩展的三个关键挑战（效率、偏好完整性、灵活参数分配）。",
-      "设计了基于语义的标记化方案，将特征分为物品无关和物品相关组，实现用户-物品解耦，支持请求级推理加速。",
-      "多序列交叉注意力机制：对异质行为序列（短时、长时、搜索）分别进行交叉注意力，防止偏好坍塌，并通过懒式KV设计降低计算开销。",
-      "多视图FFN（S-FFN、NS-FFN、T-FFN）分别针对序列、非序列和任务信号，支持灵活可扩展的参数分配，缓解传统组件扩展的收益递减。"
-    ],
-    "limitations": [
-      "论文仅在一个工业平台（快手）验证，泛化性需在其他推荐场景（如电商、广告）进一步验证。",
-      "缩放分析仅通过增加FFN隐藏维度进行，未探索其他维度（如层数、注意力头数）的联合缩放规律。",
-      "尽管推理通过用户-物品解耦加速，但自注意力层仍需注意力掩码，可能对极致延迟的在线场景仍有压力。",
-      "未与最新的生成式推荐模型（如HSTU、Wukong）进行对比，这些模型也属于模型中心扩展范畴。"
-    ],
-    "future_work": [
-      "探索UniFormer在更多推荐场景（如电商、新闻）中的适用性，验证其作为通用工业推荐骨干网络的能力。",
-      "研究更精细的参数分配策略，例如基于任务重要性或数据分布的自适应网络深度/宽度调整。",
-      "将纯注意力架构扩展为混合架构，结合MLP、RNN等对不同特征模态进行差异化建模。",
-      "深入分析缩放定律，建立参数、数据量与性能之间的量化关系，指导资源最优配置。"
-    ],
-    "related_comparison": "与前期方法相比，UniFormer在扩展范式上实现突破：组件中心方法（SIM+RankMixer、SMES）仅扩展单一模块；特征空间联合扩展方法（HyFormer、MixFormer）忽略任务空间。UniFormer将任务空间作为一等公民纳入统一扩展，并通过多视图FFN实现组件间平衡分配。在离线效果上，UniFormer超越所有基线（GAUC提升0.53% vs MixFormer 0.43%），在线指标一致正向。"
-  }
+  "figures_source": "arxiv_html",
+  "summary_zh": "提出UniFormer，一个统一缩放特征空间和任务空间的工业推荐模型框架，通过模块化分解和语义tokenization实现高效训练和推理，在线A/B测试指标显著提升。",
+  "authors": "Bo Chen, Jinlong Jiao, Tijian Hu, Ruihao Zhang, Yanzhi Liu, Chenghou Jin, Qinglin Jia, Baixuan He, Hechang Pan, Yiwu Liu, Jian Liang, Chaoyi Ma, Ruiming Tang, Han Li, Kun Gai",
+  "org_display": "Kuaishou Technology",
+  "industry_orgs": "Kuaishou Technology",
+  "affiliation_type": "industry",
+  "is_industrial_paper": true,
+  "is_ab_test": true
 }
