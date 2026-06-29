@@ -3,47 +3,54 @@
   "title": "Token Factory: Efficiently Integrating Diverse Signals into Large Recommendation Models",
   "model": "deepseek-reasoner",
   "language": "Chinese",
-  "analyzed_at": "2026-06-29T13:46:14.350997+00:00",
+  "analyzed_at": "2026-06-29T13:48:28.374859+00:00",
   "tags": [
     "Industrial Recommender Systems",
-    "Ranking"
+    "Ranking",
+    "Retrieve"
   ],
   "new_tags": [],
-  "markdown": "## 1. 核心问题\n\n工业级推荐系统中，基于Transformer的Large Recommendation Models (LRMs) 已展现出强大潜力。然而，传统信号（稠密特征如观看时长、稀疏特征如设备信息等）通常以文本化方式输入，导致Prompt长度急剧膨胀（如每个观看历史条目需12个token），带来巨大的计算和存储开销。现有方法主要聚焦于序列压缩或ID编码，却忽视了与每条交互相关的丰富特征。Token Factory旨在将异构传统信号高效映射为\"软Token\"（soft token）——即直接嵌入在模型语义空间中的可学习向量，从而在保持或提升性能的同时显著缩短Prompt长度、降低训练与推理成本。\n\n## 2. 相关工作\n\n- **大型推荐模型**：如HSTU、PLUM、SEATER、TokenRec等，多依赖文本化SID或ID tokenization，对辅助特征仍采用文本化方式。Token Factory则将特征直接映射为软Token，统一框架。\n- **Token压缩**：LONGER、GenRec、HyMiRec等方法通过全局Token、线性投影或聚类压缩序列，但往往忽略每条交互的特征细节。Token Factory在压缩时融合多个特征，保留关键信息。\n\n## 3. 方法概览\n\n<img src=\"https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page02.png\" alt=\"Token Factory整体架构\" style=\"width:60%;\">\n\n*图：Token Factory架构。传统信号经多个Token Maker生成软Token，再与文本Token交错组成输入Prompt。*\n\nToken Factory包含一组**Token Maker**，每个负责将特定类型的输入特征（稠密、稀疏、嵌入等）转换为固定数量的软Token。在视频推荐场景中，设计了三种Token Maker：\n- **WH Token Maker**：处理用户观看历史序列；\n- **Query Token Maker**：处理查询级特征（如用户画像）；\n- **Candidate Token Maker**：处理候选物品特征。\n\n软Token可以自然地与文本Token交错排列，并受益于前缀缓存（prefix caching），因为查询级特征在同一个请求内保持不变，可预计算缓存以降低推理延迟。\n\n核心优势：\n1. **Prompt紧凑性**：长度大幅缩短（如从1536降至480 token）。\n2. **确定性长度**：无论输入特征数量多少，每个Token Maker输出固定数量软Token。\n3. **更长交互序列**：通过压缩可容纳更长的历史序列。\n4. **高效训练与服务**：由于Prompt变短，注意力计算量降低。\n\n## 4. 方法细节\n\n### 4.1 Token Maker\n\n设输入特征 $F_{\\text{input}} = [f_1; f_2; \\dots; f_n]$，经各自变换函数 $t_i$（如归一化或嵌入查找）得到 $E_{\\text{input}} = \\text{Concat}(t_1(f_1), \\dots, t_n(f_n))$。再通过可微映射 $G$ 生成 $N$ 个软Token $T_{\\text{output}} \\in \\mathbb{R}^{N \\times d_{\\text{model}}}$，其中 $d_{\\text{model}}$ 为Transformer隐藏维度。$G$ 可以是MLP或更复杂的网络，并与整个LRM端到端联合训练。$N$ 的选择权衡特征容量与计算开销，简单特征常用 $N=1$，长序列可压缩为少量Token。\n\n<img src=\"https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page03.png\" alt=\"Token Maker示例：单个观看历史条目的特征融合\" style=\"width:60%;\">\n\n*图：Token Maker处理单个观看历史条目。视频SID、频道名、客户端信息、观看时长等异构特征经MLP映射为一个软Token。*\n\n### 4.2 序列压缩\n\n为进一步压缩长序列，提出两种方法：\n- **MLP压缩**：在序列维度施加MLP，将 $N$ 个连续软Token压缩为 $M$ 个（$M<N$）。\n- **注意力池化**：借鉴LONGER，对每 $K$ 个连续条目应用轻量Transformer的注意力池化，提取一个软Token，压缩比为 $1/K$。\n\n## 5. 实验设置\n\n实验基于PLUM框架，涵盖排序（CTR预测）和生成式检索（下一视频SID预测）两任务。\n- **排序任务**：使用110M MoE Gemini编码器，输入包含用户历史、传统特征。Baseline每条历史占12 token（8 SID + 1 频道 + 3 稠密），总Prompt长度1536；Treatment使用Token Factory将每条历史压缩为1个软Token，Prompt长度480。\n- **检索任务**：使用210M MoE Gemini解码器。Baseline每条历史占5 token，总长768；Treatment压缩为1个软Token，Prompt长度256。\n\n## 6. 实验结果\n\n### 6.1 排序任务\n\n- **同等batch size**：AUC曲线显示，Treatment初始略低，但在1.5M步后追上Baseline并保持持平（图4）。训练速度提升约200%（Prompt长度仅为Baseline的30%）。\n- **增大batch size**：因效率提升可增大batch size至200%，Treatment AUC显著超越Baseline（图5）。\n\n### 6.2 生成式检索任务\n\n| 指标 | 改善幅度 |\n|------|---------|\n| 离线Recall@10 | +2.0% |\n| 唯一曝光量 | +16.8% |\n| 1天新视频唯一曝光量 | +67.1% |\n| 满意观看者 | +0.04% |\n| 满意观看时长 | +0.05% |\n\n在线实验表明，Token Factory在不牺牲用户满意度的情况下显著提升新视频的探索与检索能力。\n\n### 6.3 消融与扩展研究\n\n在排序任务中固定Prompt长度480（可容纳200条历史），对比不同配置：\n- 使用软Token与使用文本SID在包含所有稠密/稀疏特征时AUC接近；\n- 移除所有传统特征后，软Token仍优于文本SID，原因是软Token可容纳完整200条历史而SID会被截断；\n- 每个软Token中融入更多特征（如稠密特征）有助于预测。\n\n进一步将历史长度从200扩展到500，并采用10%压缩比额外引入30个软Token，AUC提升+0.08%。\n\n## 7. 创新点与亮点\n\n1. **软Token概念**：将信号直接映射为模型嵌入空间中的向量，避免文本化带来的长度爆炸与信息损失。\n2. **灵活可扩展**：Token Maker可集成多种特征变换，且输出长度可人为控制。\n3. **显著的效率提升**：在排序任务中训练加速200%，检索任务中Recall提升且新视频曝光量增加67%。\n4. **保持或提升质量**：同等条件下AUC不下降，增大batch size后超越Baseline。\n\n## 8. 局限性与未来工作\n\n- **初期训练滞后**：Token Maker参数随机初始化，需一定训练步数才能达到Baseline性能；可探索预训练或更好的初始化策略。\n- **压缩可能损失细节**：极端压缩（如数百条历史压缩为10个Token）可能丢失细粒度交互信息，需针对场景调整压缩比。\n- **更复杂的压缩方法**：论文仅探索了MLP和注意力池化，可借鉴更多先进的序列模型（如Perceiver、Set Transformer）进一步提升压缩质量。\n\n## 9. 与相关工作的对比\n\n| 方法 | 信号处理方式 | Prompt长度控制 | 特征完整性 |\n|------|-------------|---------------|-----------|\n| PLUM、SEATER | 文本化SID + 自定义tokenizer | 随特征数量线性增长 | 可包含特征但导致长序列 |\n| LONGER、HyMiRec | 序列压缩（合并/聚类） | 用户指定压缩比 | 通常忽略条目级特征 |\n| Token Factory | 软Token直接生成 | 固定数量，不受特征数影响 | 保留所有输入特征信息 |\n\nToken Factory首次实现了对异构传统信号的统一软Token化，兼具长度可控与特征完整性。\n\n## 10. 评价与启示\n\n该工作为解决LRM“Prompt过长”这一工程痛点提供了实用方案。软Token的引入使得模型可更高效地利用丰富的传统信号，尤其在新内容检索上效果显著。文中对Attention权重的可视化分析（附录）也表明软Token比文本SID受注意力更均衡，减少了冗余。未来工作可探索将软Token与其他多模态信号（如图像、文本）统一，或结合因果推理增强可解释性。",
+  "markdown": "## 1. 核心问题\n\n现代工业推荐系统中，基于Transformer的大型推荐模型（LRM）在处理传统信号（如稠密/稀疏特征、用户交互序列）时，通常采用“文本化”策略——将特征映射为文本token。这导致prompt长度爆炸式增长，计算与内存开销巨大，且限制了模型处理长用户历史的能力。论文提出 **Token Factory**，通过将异构信号转化为可直接被LRM消费的“软token”（soft tokens），在保持信息完整性的同时显著压缩序列长度，提升训练与推理效率。\n\n## 2. 相关工作\n\n- **Large Recommendation Models**：如HSTU、PLUM、SEATER、TokenRec等，通常依赖文本化辅助特征。Token Factory是首个将传统信号直接映射为软token的统一框架。\n- **Token Compression**：如LONGER、GenRec、HyMiRec等通过合并或投影压缩item token，但忽略交互特征。Token Factory允许在压缩过程中融合各种特征。\n\n## 3. 方法概览\n\nToken Factory的核心构件是 **Token Maker**。每个Token Maker接收一组异构的原始特征（稠密、稀疏、序列），经可学习变换生成固定数量的软token。这些软token被插入到prompt的指定位置，与文本token共同输入LRM。框架支持三种典型Maker：\n- **WH Token Maker**：处理用户观看历史序列（每个video多项特征 $\to$ 1个软token）。\n- **Query Token Maker**：处理用户级特征（如人口属性）。\n- **Candidate Token Maker**：处理候选视频特征。\n\n关键优势：\n- **Prompt紧凑**：长度降至文本化的1/3~1/5。\n- **确定性长度**：每个Maker输出固定数量token，不随输入特征数变化。\n- **支持更长历史**：可通过压缩（MLP或Attention Pooling）进一步缩短序列。\n- **训练/推理加速**：更短序列减少计算量；query/用户级软token可预计算并缓存（prefix caching）。\n\n## 4. 方法细节\n\n### 4.1 Token Maker形式化\n\n设输入特征 $F_{\\text{input}} = [f_1; f_2; \\dots; f_n]$，经各自变换 $t_i$（如归一化、Embedding查找）后拼接：\n$$\nE_{\\text{input}} = \\operatorname{Concat}(t_1(f_1), t_2(f_2), \\dots, t_n(f_n))\n$$\n\n然后通过可微映射 $G$ 投影到 $N \\times d_{\\text{model}}$，经reshape得到 $N$ 个软token：\n$$\nT_{\\text{output}} = G(E_{\\text{input}}), \\quad T_{\\text{output}} \\in \\mathbb{R}^{N \\times d_{\\text{model}}}\n$$\n$G$ 可以是MLP或小型Transformer，与LRM端到端联合训练。\n\n### 4.2 序列压缩\n\n- **MLP压缩**：对已生成的软token序列（shape: [batch, seq_len, token_dim]），在序列维度应用MLP，将长度从 $N$ 映射到 $M$。\n- **Attention Pooling**：借鉴LONGER，对每 $K$ 个item用轻量Transformer+池化生成一个软token，压缩比 $1/K$。\n\n### 4.3 与文本化prompt对比\n\n原文给出一个具体例子：文本化prompt中每个watch item占用12个token（8个SID子token + 1个频道名 + 3个稠密特征）；Token Factory将其压缩为1个软token。注意，软token不保留人类可读文本，但仍可通过注意力机制充分利用信息。\n\n## 5. 训练与部署优化\n\n- **训练加速**：Token Factory将ranking任务prompt从1536 token降至480 token（约30%），在相同batch size下训练速度提升约200%。若分配更多计算（增batch size 200%），模型质量可超越baseline。\n- **推理缓存**：由于query和用户级特征在一次请求中静态不变，其软token可预计算并缓存，降低延迟。\n\n## 6. 实验设置\n\n### 6.1 排序任务（CTR预测）\n\n- **模型**：基于110M MoE的Gemini encoder，PLUM框架。\n- **数据**：用户观看历史、稠密/稀疏特征、下一视频点击标签。\n- **Baseline**：文本化SID+特征（每item 12 token），prompt上限1536 token（含200条watch history）。\n- **Treatment**：Token Factory（每item 1 soft token），prompt长度480 token。\n- **批次大小**：初始相同，后续实验增加treatment的batch size。\n\n### 6.2 生成式检索任务（next SID预测）\n\n- **模型**：基于210M MoE的Gemini decoder，PLUM。\n- **数据**：用户观看历史、稠密特征、下一视频的Semantic ID。\n- **Baseline**：文本化SID+特征（每item 5 token），prompt上限768 token。\n- **Treatment**：Token Factory（每item 1 soft token），prompt长度256 token。\n\n## 7. 实验结果\n\n### 7.1 排序任务\n\n| 配置 | ROC AUC | 训练速度 |\n|------|---------|----------|\n| Baseline (文本化) | 参照线 | 1× |\n| Token Factory (相同batch) | 1.5M步后追平 | ~2× |\n| Token Factory (batch×3) | 早期即超越 | ~2×(但batch更大) |\n\n- 初始阶段treatment AUC略低，因Token Maker参数需从零学习；1.5M步后与baseline持平。\n- 增加batch size后，treatment在更早期超越baseline。\n\n### 7.2 生成式检索任务\n\n| 指标 | 相对提升 |\n|------|----------|\n| Offline Recall@10 | +2.0% |\n| Unique Impressions | +16.8% |\n| Unique Impressions (1d fresh) | +67.1% |\n| Satisfied Watchers | +0.04% |\n| Satisfied Watch Time | +0.05% |\n\n- 离线Recall显著提升；在线实验中，新视频曝光量大幅增加，且用户满意度未受损。\n\n### 7.3 消融与缩放研究\n\n- 在固定480 token、batch 32k的条件下，比较不同配置（均包含200 watch items）：\n  - **Baseline（全soft+全特征）** vs **WH_SID（文本化SID+全特征）**：AUC无显著差距。\n  - **NO_FEAT（soft但移除稠密/稀疏）** vs **NO_FEAT_STRICT（soft仅含SID+频道）**：后者更差，说明特征融入有增益。\n  - **WH_SID_NO_FEAT** vs **NO_FEAT_STRICT**：soft token更好，因文本化SID在480 token预算下被截断，而soft token可容纳全部200 items。\n- 扩展watch history至500 items（压缩10%）：AUC提升+0.08%。\n\n## 8. 创新点与亮点\n\n1. **软token机制**：将传统信号直接投影到LRM的embedding空间，避免文本化带来的长度膨胀和信息损失。\n2. **Token Maker模块化设计**：支持任意类型特征（稠密、稀疏、序列），输出长度固定，易于扩展。\n3. **效率-质量双赢**：在工业级ranking与retrieval任务中，压缩prompt同时保持或提升效果，训练加速显著。\n4. **注意力利用更充分**：注意力可视化表明软token的注意力分布更分散，避免了文本化SID中大量token未被使用的冗余。\n\n## 9. 局限性与未来工作\n\n- Token Maker的初始随机参数需要额外训练步数才能收敛；未来可探索更好的初始化策略。\n- 压缩率 $N$ 需经验调参；复杂特征可能需要更大的 $N$，但会增加序列长度。\n- 当前仅在PLUM框架上验证，在其他LRM（如HSTU）上的泛化性待考察。\n- 未深入探讨软token的语义可解释性，可能不利于调试。\n\n## 10. 与相关工作的对比\n\n| 对比方法 | 核心差异 | Token Factory优势 |\n|----------|----------|------------------|\n| PLUM（文本化） | 直接文本化SID+特征 | 长度大幅缩短，速度2×，质量持平或更好 |\n| LONGER | 合并K个item token | 不保留交互特征；Token Factory可在合并时融合特征 |\n| GenRec / HyMiRec | 压缩item ID序列 | 忽略其他特征；Token Factory统一处理多种特征 |\n| TokenRec | 量化user/item表示为离散ID | Token Factory保持连续表示，端到端训练 |\n\n## 11. 评价与启示\n\nToken Factory是工业推荐系统中处理异构信号的优雅解决方案，其“软token”思想具有通用性：任何需要混合文本与传统特征的场景（如搜索、广告）均可借鉴。论文的实验部分设计严谨，既有离线AUC对比，又有在线A/B实验，并做了充分的消融。注意，论文原文包含多张方法图和注意力热力图，但本文由于图像资源限制未引用；读者可自行参考原图（Figures 2–10）。总体而言，该工作为LRM的高效多模态集成提供了实用范本，未来有望结合token压缩与语义ID生成实现更极致的效率提升。",
   "figures": [
     {
-      "label": "Page 1",
-      "caption": "Page 1 of the PDF (auto-rendered fallback because no figure-tagged HTML was found).",
-      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page01.png"
+      "label": "Page 1 [LOW-QUALITY full-page fallback]",
+      "caption": "WARNING: full-page screenshot of PDF page 1. Contains everything on that page (text + figures + headers/footers). DO NOT use this in the analysis unless absolutely necessary.",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page01.png",
+      "kind": "pdf_full_page"
     },
     {
-      "label": "Page 2",
-      "caption": "Page 2 of the PDF (auto-rendered fallback because no figure-tagged HTML was found).",
-      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page02.png"
+      "label": "Page 2 [LOW-QUALITY full-page fallback]",
+      "caption": "WARNING: full-page screenshot of PDF page 2. Contains everything on that page (text + figures + headers/footers). DO NOT use this in the analysis unless absolutely necessary.",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page02.png",
+      "kind": "pdf_full_page"
     },
     {
-      "label": "Page 3",
-      "caption": "Page 3 of the PDF (auto-rendered fallback because no figure-tagged HTML was found).",
-      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page03.png"
+      "label": "Page 3 [LOW-QUALITY full-page fallback]",
+      "caption": "WARNING: full-page screenshot of PDF page 3. Contains everything on that page (text + figures + headers/footers). DO NOT use this in the analysis unless absolutely necessary.",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page03.png",
+      "kind": "pdf_full_page"
     },
     {
-      "label": "Page 5",
-      "caption": "Page 5 of the PDF (auto-rendered fallback because no figure-tagged HTML was found).",
-      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page05.png"
+      "label": "Page 5 [LOW-QUALITY full-page fallback]",
+      "caption": "WARNING: full-page screenshot of PDF page 5. Contains everything on that page (text + figures + headers/footers). DO NOT use this in the analysis unless absolutely necessary.",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page05.png",
+      "kind": "pdf_full_page"
     },
     {
-      "label": "Page 6",
-      "caption": "Page 6 of the PDF (auto-rendered fallback because no figure-tagged HTML was found).",
-      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page06.png"
+      "label": "Page 6 [LOW-QUALITY full-page fallback]",
+      "caption": "WARNING: full-page screenshot of PDF page 6. Contains everything on that page (text + figures + headers/footers). DO NOT use this in the analysis unless absolutely necessary.",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page06.png",
+      "kind": "pdf_full_page"
     },
     {
-      "label": "Page 7",
-      "caption": "Page 7 of the PDF (auto-rendered fallback because no figure-tagged HTML was found).",
-      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page07.png"
+      "label": "Page 7 [LOW-QUALITY full-page fallback]",
+      "caption": "WARNING: full-page screenshot of PDF page 7. Contains everything on that page (text + figures + headers/footers). DO NOT use this in the analysis unless absolutely necessary.",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.19635/page07.png",
+      "kind": "pdf_full_page"
     }
   ],
   "figures_source": "pdf_screenshot",
-  "summary_zh": "提出Token Factory，通过将传统异构信号（稠密、稀疏、序列特征）转换为可学习的软Token（soft token），在保持或提升推荐质量的同时大幅压缩Prompt长度，实现训练加速200%并提升新视频检索曝光量67%。",
+  "summary_zh": "Token Factory 提出将推荐系统中的传统稠密/稀疏/序列信号转化为固定数量的“软token”，直接输入Transformer，从而显著压缩prompt长度（降至约30%），在保持或提升排序/检索质量的同时实现训练速度翻倍和在线指标提升。",
   "authors": "Xilun Chen, Shao-Chuan Wang, Baykal Cakici, Lukasz Heldt, Lichan Hong, Raghu Keshavan, Aniruddh Nath, Li Wei, Xinyang Yi",
   "org_display": "Google",
   "industry_orgs": "Google",
