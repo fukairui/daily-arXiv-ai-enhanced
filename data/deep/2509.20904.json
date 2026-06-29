@@ -3,40 +3,46 @@
   "title": "FORGE: Forming Semantic Identifiers for Generative Retrieval in Industrial Datasets",
   "model": "deepseek-reasoner",
   "language": "Chinese",
-  "analyzed_at": "2026-06-29T11:09:10.927476+00:00",
+  "analyzed_at": "2026-06-29T11:54:33.566074+00:00",
   "tags": [
     "Industrial Recommender Systems",
-    "Retrieve",
-    "LLM as Rec"
+    "Retrieve"
   ],
   "new_tags": [],
-  "deep": {
-    "background": "生成式检索(GR)通过自回归方式直接解码物品标识符，在推荐系统中受到广泛关注。物品的标识符(tokenization)是GR的基础。早期方法采用单token随机标识符(如哈希ID)，需要管理庞大词汇表且训练时仅采样少量负样本，导致离在线不一致；而语义标识符(SID)利用多模态数据构建多级码字（如3级8192码本），实现语义共享和紧凑编码，成为更优方案。然而，现有工作对SID构建策略（如模态选择、编码方式、碰撞缓解）缺乏系统研究，且评估SID质量需完整训练GR模型，代价高昂。",
-    "problem": "如何系统性地设计SID构建策略以获得更优的GR推荐性能，以及如何在不经过完整GR训练的情况下高效评估SID质量。",
-    "motivation": "当前SID构建存在两方面挑战：① 研究者面临大量设计选择（模态、编码器、碰撞处理等）而无明确指导；② 评估SID需完整训练GR模型，计算开销巨大，无法快速迭代。为填补这一空白，论文提出FORGE基准，通过系统实验提取实用策略，并设计直接指标替代昂贵训练。",
-    "method_overview": "FORGE框架将SID构建分解为三个核心模块：特征提取（利用CN-CLIP和对比学习从多模态数据融合语义与协同信息）、SID编码（采用RQ-VAE将特征映射为离散码字序列，并比较多种编码方案）、SID后处理（通过KNN-based或Random-based策略缓解ID碰撞，提升码本公平性）。下游GR模型采用Qwen或T5，输入用户行为序列与SID，输出目标物品SID，推理时使用动态beam search。为评估SID质量，论文引入Embedding HitRate（基于多模态特征的物品检索命中率）和Gini系数（衡量SID分配公平性），实验证明两者与GR性能高度相关。",
-    "method_details": "特征提取阶段：使用预训练CLIP模型提取文本与图像特征，经QFormer融合后得到多模态表示H_i。进一步，采用InfoNCE损失利用物品共现关系(i2i)和侧信息（类别、卖家等）进行对比学习，增强表示判别性。SID编码阶段：RQ-VAE通过多级残差量化将H_i编码为码字序列[c1,...,cm]；比较了Random、Multiple-VQ、RQ-Kmeans、OPQ等方法。后处理阶段：KNN-based策略在量化后遍历候选SID，若某SID对应物品数超过阈值σ则重新分配；Random-based策略仅对最后一级码字按插入顺序循环分配，牺牲部分语义换取更高公平性。下游GR：将用户历史点击物品的SID序列与系统提示拼接，输入语言模型（Qwen2.5-0.5B/3B或T5-base），以交叉熵损失训练预测目标SID的码字序列。推理时使用动态beam search：第一/二/三步分别保留300/600/1200个候选，降低75%计算量。",
-    "experiments": "在Amazon数据集（0.7M物品）和自研AL-GR工业数据集（251M物品，14B交互，包含推荐与搜索任务）上进行实验。默认设置：RQ-VAE编码，3级×8192码本，Qwen2.5-0.5B作为GR模型。对比策略包括：不同后处理（KNN-10/5、Random-5、Merge、noco）、不同数据模态（text-only、image-only、i2i-only、sideinfo、query2i、samecate）、不同SID结构（2×32768、3×512、1024×4096×32768、4×4096等）、不同编码方法（Random、Multiple-VQ、RQ-Kmeans、OPQ）。评估指标为HR@20/100/500/1000。同时验证两个直接指标（Embedding HitRate、Gini系数）与HR的相关性。另在搜索任务、不同模型大小（3B）、不同架构（T5）上验证泛化性。最后在淘宝“猜你喜欢”场景进行7天在线A/B测试。",
-    "results_analysis": "① 后处理显著提升性能：KNN-5比base提升HR@20约16%，Random-5提升约26%；而noco（无处理）和merge（故意合并SID）导致性能大幅下降。说明SID利用公平性比最后一级语义更重要。② 更多模态和协同信息有效：i2i和sideinfo在HR@1000上均有5%+提升，但query2i和samecate反而下降，表明共现关系比类别/查询更有效。③ 3级SID为最佳平衡：2级结构性能差，4级结构收益有限且推理成本高。④ RQ-VAE优于其他编码方法，但配合优化后处理后优势更大。⑤ Embedding HitRate与Gini系数均与HR呈强相关：优化后的Final配置在Embedding HitRate和Gini上均优于base，且与HR排序一致。⑥ 泛化性强：优化策略在2级SID、搜索任务、3B模型、T5架构上均保持效果。⑦ 在线A/B：7天实验显示，Final相比base使PVR提升8.93%、HitRate提升10.02%、交易量提升0.35%（绝对值）。",
-    "conclusion": "论文通过FORGE基准系统揭示了SID构建的关键策略：充分利用多模态和协同信息、采用有效后处理缓解ID碰撞（尤其是Random-based策略）、平衡SID结构与容量。提出的Embedding HitRate和Gini系数可替代昂贵的GR训练来评估SID质量。发布的AL-GR数据集填补了工业级GR基准的空白。这些发现已在淘宝全量部署并取得显著业务收益，为生成式检索的SID设计提供了实用指南。",
-    "innovations": [
-      "首次系统性地从特征提取、SID编码、后处理三个维度构建SID策略研究基准，覆盖多种设计选择。",
-      "提出两个无需GR训练即可评估SID质量的指标：Embedding HitRate（基于多模态特征的物品检索命中率）和Gini系数（衡量SID分配公平性），并通过实验验证与下游性能强相关。",
-      "发布首个工业级生成式检索数据集AL-GR，包含14B交互、251M物品及多模态特征，支持推荐与搜索任务。",
-      "在淘宝线上部署，通过7天A/B实验证明策略有效性（交易量+0.35%），全量上线验证实用价值。"
-    ],
-    "limitations": [
-      "SID构建依赖高质量多模态特征，对于仅有ID或文本的数据集可能难以直接迁移。",
-      "后处理策略（Random-5）牺牲了最后一级语义信息，可能不适用于对细粒度语义要求更高的场景。",
-      "实验仅基于Qwen和T5模型，未验证在更大规模（如>100B）或不同训练范式（如RLHF）下的效果。",
-      "未深入讨论SID对冷启动物品或域外物品的泛化能力。"
-    ],
-    "future_work": [
-      "探索自动搜索最优SID结构（如码本大小、层级数）的算法，替代人工枚举。",
-      "研究结合用户反馈在线更新SID的机制，使标识符能动态适应物品流行度变化。",
-      "将Embedding HitRate与Gini系数作为目标函数，直接优化SID构建过程。",
-      "扩展SID到多任务联合（如推荐+搜索+广告）场景下的统一标识符生成。"
-    ],
-    "related_comparison": "论文系统比较了SID构建的各环节方案。与单token标识符（如Item2vec哈希）相比，SID通过多级码字实现紧凑表示和语义共享。在编码方法上，对比了Random、Multiple-VQ、RQ-Kmeans、OPQ和RQ-VAE，实验表明RQ-VAE在组合优化后处理时最优。在数据关系上，i2i（物品共现）优于query2i和samecate。在后处理策略上，Random-based（牺牲最后一级语义）优于KNN-based，说明公平性比语义精度更重要。此外，与现有工业数据集（如TenRec、RecFlow）相比，AL-GR规模更大（14B vs 142M~38M）且支持多模态和搜索任务。"
-  }
+  "markdown": "## 1. 核心问题\n\n生成式检索（Generative Retrieval, GR）通过端到端预测下一个物品的标识符来完成推荐，其中物品标识符的设计（Tokenization）是基础。当前主流的语义标识符（Semantic Identifier, SID）采用多级码字（multi-level codewords）编码，具有语义可区分性和参数共享能力。然而，现有工作（1）对 SID 构建策略（模态选择、编码方式、碰撞处理）缺乏系统研究；（2）评估 SID 质量需要完整训练 GR 模型，计算开销极大。论文 FORGE 针对上述挑战，提出了一套 SID 构建的基准框架，包含策略分类、离线验证、在线 A/B 实验，并引入无需 GR 训练的 SID 直接评估指标。\n\n## 2. 相关工作\n\n#### 生成式检索（Generative Retrieval）\n传统检索先进行用户/物品嵌入，再通过近似最近邻搜索（ANN）选取候选。生成式检索（如 KE、OneRec）使用自回归方式直接解码物品标识符，推荐模型以 T5、Qwen 等序列模型为主，配合交叉熵损失优化。\n\n#### 语义标识符（Semantic Identifier）\nSID 最早用于搜索和推荐，将多模态特征通过残差量化（RQ-VAE）或乘积量化（OPQ）转化为离散码字序列。近期工作尝试引入协同信息（i2i）、端到端学习码本（BBQRec）等方法改进 SID。FORGE 对这些策略进行统一视角下的系统比较，涵盖特征提取、编码和后处理全流程。\n\n## 3. 方法概览\n\nFORGE 的框架分为三阶段：\n1. **特征提取**：利用多模态大模型（CN-CLIP）提取文本、图像特征，并通过 QFormer 融合，可引入协同信号（i2i）和类别、卖家等边信息。\n2. **SID 编码**：使用 RQ-VAE 将融合特征量化为多级码字序列（如 3 级×8192 码书）。\n3. **SID 后处理**：解决 ID 碰撞（多个物品映射到相同 SID）问题，提出 KNN-based 和 Random-based 两种策略控制每 SID 的物品数。\n\n![Figure 1: 单 token 标识符 vs. 语义标识符，以及 SID 构建的整体流程](https://arxiv.org/html/2509.20904v3/x1.png)\n\n![Figure 2: GR 系统总览——(a) SID 生成流程（多模态编码器、量化、tokenization）；(b) tokenizer 工作细节；(c) 碰撞处理；(d) GR 训练与动态束搜索推理](https://arxiv.org/html/2509.20904v3/x2.png)\n\n## 4. 方法细节\n\n### 4.1 特征提取与融合\n\n对物品 $i$，分别用文本编码器 $M_{\\text{text}}$ 和图像编码器 $M_{\\text{image}}$ 提取特征，再通过 MFusion（QFormer）融合得到多模态特征 $\\mathbf{H}_i$：\n$$\n\\mathbf{H}_i = \\text{MFusion}(M_{\\text{text}}(I_i^{\\text{text}}),\\, M_{\\text{image}}(I_i^{\\text{image}})).\n$$\n\n为增强特征区分度和协同信号，使用 InfoNCE 损失 $\\mathcal{L}_{\\text{InfoNCE}}$，包含文本-文本、图像-图像、融合特征-融合特征三项，正样本来自 i2i 共现表，负样本采用 in-batch 采样。\n\n### 4.2 SID 编码：RQ-VAE\n\n采用残差量化（Residual Quantization）。对第 $l$ 级（$l=1,\\ldots,m$），残差 $\\mathbf{h}_l$ 初始为 $\\mathbf{H}_i$，随后查找最近码字 $c_l = \\arg\\min_{c \\in [1,n_l]} \\|\\mathbf{h}_l - \\mathbf{q}_c^{(l)}\\|$，并更新残差 $\\mathbf{h}_{l+1} = \\mathbf{h}_l - \\mathbf{q}_{c_l}^{(l)}$。最终 SID 为码字序列 $\\{c_1, c_2, \\ldots, c_m\\}$。\n\n实验比较了随机赋值、Multiple-VQ、RQ-Kmeans、OPQ 等方法，RQ-VAE 因残差结构能更好保留语义，配合后续碰撞处理（Final 配置）取得最佳效果。\n\n### 4.3 SID 后处理与碰撞缓解\n\n多个语义相似的物品可能映射到同一个 SID（ID 碰撞），导致某些 SID 过度拥挤而其他 SID 未被使用。论文提出两种策略：\n- **KNN-based 策略**：对每个物品，编码时生成多个候选 SID（通过考虑第三级码字的多个最近邻），选择当前负载小于阈值 $\\sigma$ 的 SID。\n- **Random-based 策略**：只保留前两级码字语义，第三级码字按物品插入顺序循环分配（取模运算），彻底牺牲第三级语义以换取极致的负载均衡。\n\n实验表明 Random-5（循环取模）因极大提升码书利用率，性能超过所有语义保持策略。\n\n### 4.4 生成式检索训练与动态束搜索\n\n训练时，将用户历史行为的 SID 序列与系统/用户提示拼接，输入给推荐模型（如 Qwen2.5-0.5B），使用交叉熵损失预测每级码字：\n$$\n\\mathcal{L}_{\\text{rec}} = -\\sum_{i=1}^m \\log P_{\\theta,\\tau}(c_i \\mid x, c_{<i}).\n$$\n\n推理时采用**动态束搜索**：逐步增大束宽（第一次 300，第二次 600，第三次 1200），使前两步计算量降低 75%，最终仍获得 1200 个候选 SID。\n\n## 5. 工业数据集 AL-GR\n\n论文发布首个面向 GR 的工业级数据集 AL-GR，采集自淘宝：\n- **序列数据**：连续 10 天共约 14B 交互，131M 用户，251M 物品。按时间分为 S1（4天）、S2（3天）、S3（3天），每天 40M 样本。每条记录包含 action_seq（最长 100）、target_item、query（搜索任务不为空）。\n- **物品信息**：提供多模态嵌入（文本、图像）以及 i2i 关系表。\n- **与现有数据集对比**：规模远超 TenRec（100 倍），首次支持多模态 SID 构建及搜索/推荐双任务评估。\n\n## 6. 实验设置\n\n默认配置：3 级 SID，每级 8192 码书（$3\\times 8192$），RQ-VAE 编码，使用 Qwen2.5-0.5B 作为 GR 模型，beam search 束宽 1200。评估指标为 HitRate@K（K=20/100/500/1000）。\n\nBase 配置：使用 i2i 共现数据训练 InfoNCE，KNN-based 碰撞阈值 $\\sigma=25$。\nFinal 配置：Base + sideinfo（类别/卖家等边信息）+ 更充分 i2i + Random-5 碰撞策略。\n\n## 7. 实验结果\n\n### 7.1 SID 构建策略的影响（RQ1）\n\n表：AL-GR 上不同策略的性能（$3\\times 8192$，3 阶段平均）\n\n| 方法 | HR@20 | HR@100 | HR@500 | HR@1000 |\n|------|-------|--------|--------|---------|\n| base | 4.03% | 10.51% | 22.26% | 26.34% |\n| +KNN-10 | 4.37% | 11.21% | 23.05% | 26.57% |\n| +KNN-5  | 4.69% | 11.77% | 23.66% | 26.70% |\n| +Random-5| 5.11% | 12.60% | 24.70% | 27.36% |\n| +i2i     | 4.04% | 10.68% | 22.82% | 27.99% |\n| +sideinfo| 4.16% | 10.83% | 23.12% | 28.21% |\n| **Final** | **5.22%** | **13.11%** | **25.96%** | **30.05%** |\n\n- 碰撞缓解显著提升性能：Random-5 优于 KNN，说明后级语义贡献有限，均匀分布更重要。\n- 融合 i2i 和 sideinfo 对高 K（@1000）提升明显，表明丰富信号增强长尾检索。\n\n### 7.2 直接评估指标（RQ2）\n\n论文提出两个无需 GR 训练的 SID 质量指标：**Embedding HitRate**（基于多模态特征 $\\mathbf{H}_i$ 做物品检索的 HR）和 **Gini 系数**（衡量 SID 分配均匀度）。\n\n![Figure 3: Embedding HitRate 与 HR@500 正相关；Gini 系数越低（越均匀），HR@500 越高](https://arxiv.org/html/2509.20904v3/x3.png)\n\n![Figure 4: 多种指标对比——Embedding HitRate、Gini 系数、码书利用率与检索性能强相关，特征保真度等弱相关](https://arxiv.org/html/2509.20904v3/figs/metrics.png)\n\n实验表明两种指标与下游 HR 的趋势高度一致，可用作 SID 筛选的代理。\n\n### 7.3 泛化性验证（RQ3）\n\n- **2 级 SID**（$2\\times 32768$）：Final 在 HR@1000 上提升 16-18%。\n- **搜索任务**：Final 在 $3\\times 8192$ 下 HR@20 从 14.30% 提升至 23.39%。\n- **大模型**：Qwen2.5-3B 在 Final 下 HR@1000 达 32.12%，优于 0.5B 版本。\n- **不同架构**：T5-base 同样受益于 Final 配置。\n\n### 7.4 在线 A/B 实验\n\n在淘宝“猜你喜欢”部署 7 天，Final 配置相比 base 获得：\n| PVR（商品访问率） | HitRate | 交易笔数 |\n|-----------------|---------|---------|\n| +8.93%         | +10.02%| **+0.35%**（绝对值） |\n\n## 8. 创新点与亮点\n\n1. **系统性 SID 构建研究**：首次从特征提取、编码、后处理全链路比较多种策略，形成可复用的设计指南。\n2. **免训练 SID 评估**：Embedding HitRate 和 Gini 系数能在无 GR 训练情况下高质量评估 SID，大幅降低调优成本。\n3. **工业级基准**：发布 AL-GR 数据集（14B 交互，多模态），填补现有数据集在规模和模态上的空白。\n4. **在线验证**：在淘宝真实流量中取得交易笔数提升 0.35%，证明学术发现可转化为业务收益。\n\n## 9. 局限性与未来工作\n\n- 文中的 SID 构建仍依赖预训练编码器（CN-CLIP），未端到端优化特征与码书。\n- Random-5 虽提升利用率却破坏后级语义，如何在公平性与语义保持间取得最优折衷仍是开放问题。\n- 数据集仅包含 10 天行为，更长的时间跨度下 SID 的时效性（如新品冷启动）未充分讨论。\n- 动态束搜索的束宽策略（300/600/1200）基于经验设定，缺乏理论最优性保证。\n\n## 10. 与相关工作的对比\n\n| 工作 | 领域 | SID 构建深度 | 工业验证 | 直接评估指标 |\n|------|------|-------------|---------|------------|\n| TIGER, USP | 搜索/推荐 | 简单（固定量化） | 无 | 无 |\n| OneRec | 搜索 | 内部使用 RQ-Kmeans，无系统比较 | 有 | 无 |\n| BBQRec | 推荐 | 端到端学习码本 | 无 | 无 |\n| **FORGE** | **推荐+搜索** | **全面策略对比** | **有（+0.35% 交易）** | **Embedding HitRate + Gini** |\n\n## 11. 评价与启示\n\nFORGE 是一篇高质量的系统性实践论文，将工业界常用的 SID 构建琐碎知识升华为可复现的基准。其对碰撞处理的洞察（最终层语义不如均匀性重要）具有启发性。提出的直接评估指标对社区进一步优化 SID 极具实用价值。AL-GR 数据集作为首个多模态、大规模 GR 数据集，有望加速相关研究。不过，论文更多是经验总结而非理论突破，未来可探索端到端可微的 SID 生成。",
+  "figures": [
+    {
+      "label": "Figure 1",
+      "caption": "Figure 1 . Diagram of (a) single token identifier and (b) semantic identifier. (c) The construction of semantic identifiers.",
+      "src": "https://arxiv.org/html/2509.20904v3/x1.png"
+    },
+    {
+      "label": "Figure 2",
+      "caption": "Figure 2 . Overview of GRs. (a) The generation process of SIDs. Left panel: the training of the text/image encoder . Right panel: the schematic diagram of item tokenization. (b) Detailed workflow of the tokenizer. (c) Post-collision handling for semantic identifiers. (d) The training and dynamic inference procedure of generative retrieval.",
+      "src": "https://arxiv.org/html/2509.20904v3/x2.png"
+    },
+    {
+      "label": "",
+      "caption": "",
+      "src": "https://arxiv.org/html/2509.20904v3/x3.png"
+    },
+    {
+      "label": "",
+      "caption": "",
+      "src": "https://arxiv.org/html/2509.20904v3/x4.png"
+    },
+    {
+      "label": "Figure 4",
+      "caption": "Figure 4 . Performance comparison under different metrics.",
+      "src": "https://arxiv.org/html/2509.20904v3/figs/metrics.png"
+    }
+  ],
+  "figures_source": "arxiv_html",
+  "summary_zh": "FORGE 系统研究了生成式检索中语义标识符的构建策略（特征提取、编码、后处理），通过离线实验和淘宝在线 A/B 实验验证了碰撞缓解与多模态融合的有效性，提出了两个无需 GR 训练的 SID 质量评估指标，并发布了包含 14B 交互的工业级数据集 AL-GR。",
+  "authors": "Kairui Fu, Tao Zhang, Shuwen Xiao, Ziyang Wang, Xinming Zhang, Chenchi Zhang, Yuliang Yan, Junjun Zheng, Xiangheng Kong, Shengyu Zhang, Kun Kuang, Yuning Jiang",
+  "org_display": "Zhejiang University, Taobao & Tmall Group of Alibaba",
+  "industry_orgs": "Taobao & Tmall Group of Alibaba",
+  "affiliation_type": "collaboration",
+  "is_industrial_paper": true,
+  "is_ab_test": true
 }
