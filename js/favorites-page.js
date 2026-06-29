@@ -627,6 +627,30 @@ function pollForResult(id, btn) {
     }, POLL_INTERVAL_MS);
 }
 
+/** 轮询 data/favorites.jsonl，等待 enhance_single 跑完后回填 (enhanced_at) 即把元数据合并入本地，刷新卡片。*/
+function pollForEnhancement(id) {
+    const start = Date.now();
+    const timer = setInterval(async () => {
+        if (Date.now() - start > POLL_TIMEOUT_MS) {
+            clearInterval(timer);
+            return;
+        }
+        const res = await GitHubClient.getFile('data/favorites.jsonl');
+        if (!res.exists || !res.content) return;
+        const row = Favorites.parseRemoteRows(res.content).find(r => r.id === id);
+        if (!row) return;
+        const enhanced = row.enhanced_at || row.org_display || (row.affiliation_type && row.affiliation_type !== 'unknown') || row.summary;
+        if (!enhanced) return;
+        clearInterval(timer);
+        // 把远端最新行合并回本地 meta（保留用户手动编辑过的字段），并刷新。
+        const metaAll = Favorites.getMeta();
+        metaAll[id] = Favorites.remoteRowToMeta(row, metaAll[id] || {});
+        Favorites._saveMeta(metaAll);
+        setManualAddStatus(`增强完成：${row.title || id}`, 'success');
+        render();
+    }, POLL_INTERVAL_MS);
+}
+
 /* ---------------- 深度分析弹窗 ---------------- */
 
 function section(title, content) {
@@ -903,27 +927,28 @@ async function handleManualAddArxiv() {
             );
         }
 
-        // 自动触发深度分析，让 deepseek-reasoner 从 PDF 中提取机构、中文 tldr、产学属性等。
-        // 这一步和「深度分析」按钮的逻辑一致，因此跑完后机构、属性、简要摘要会自动回填。
+        // 自动触发轻量增强 (deepseek-chat / enhance.py)：和每日爬虫同一条链路，
+        // 解析机构、产学属性、中文 tldr (=AI.tldr) 并回填到 favorites.jsonl。
+        // 想做论文精读，仍可点卡片上的「深度分析」单独触发 deep-analyze。
         try {
-            const dispRes = await GitHubClient.dispatch(DISPATCH_EVENT, {
+            const dispRes = await GitHubClient.dispatch('enhance-single', {
                 id,
                 pdf: metaToAdd.pdf || `https://arxiv.org/pdf/${id}`,
                 title: metaToAdd.title || id,
-                date: metaToAdd.date || '',
-                affiliations: metaToAdd.org_display || '',
-                known_tags: knownTags.map(t => t.name).filter(Boolean),
-                language: 'Chinese'
+                abstract: metaToAdd.details || '',
+                authors: metaToAdd.authors || '',
+                categories: Array.isArray(metaToAdd.categories) ? metaToAdd.categories.join(',') : (metaToAdd.categories || ''),
+                date: metaToAdd.date || ''
             });
             if (!dispRes.ok) {
-                setManualAddStatus(`已添加，但触发深度分析失败 (${dispRes.status})：${dispRes.message || '未知错误'}。可稍后在卡片上点「深度分析」重试。`, 'error');
+                setManualAddStatus(`已添加，但触发增强失败 (${dispRes.status})：${dispRes.message || '未知错误'}。可稍后再次手动触发。`, 'error');
             } else {
-                setManualAddStatus(`已添加并触发深度分析：${metaToAdd.title || id}。后端跑完后机构/中文摘要/属性会自动出现，可稍后刷新。`, 'success');
-                // 后台轮询深度分析结果；拿到后会刷新页面。
-                pollForResult(id, null);
+                setManualAddStatus(`已添加并触发增强：${metaToAdd.title || id}。后端跑完后机构/中文摘要/属性会自动出现，可稍后刷新。`, 'success');
+                // 轮询 favorites.jsonl，直到检测到 enhanced_at（增强完成）后刷新页面。
+                pollForEnhancement(id);
             }
         } catch (e) {
-            setManualAddStatus(`已添加，但触发深度分析失败：${e.message || e}`, 'error');
+            setManualAddStatus(`已添加，但触发增强失败：${e.message || e}`, 'error');
         }
     } else {
         setManualAddStatus(`已添加到本地（未配置 PAT，无法触发深度分析或跨浏览器同步）：${metaToAdd.title || id}`, 'info');

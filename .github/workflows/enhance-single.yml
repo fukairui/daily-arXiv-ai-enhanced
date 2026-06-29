@@ -1,0 +1,166 @@
+name: enhance-single
+
+# 由前端通过 repository_dispatch 触发：对单篇手动添加的 arXiv 论文，
+# 跑和每日爬虫同一个 enhance.py（deepseek-chat / vars.MODEL_NAME），
+# 把 AI 字段（中文 tldr、机构、产学属性等）回填到 data/favorites.jsonl。
+on:
+  repository_dispatch:
+    types: [enhance-single]
+  workflow_dispatch:
+    inputs:
+      id:
+        description: "arXiv paper id (e.g. 2401.12345)"
+        required: true
+      title:
+        description: "paper title (optional)"
+        required: false
+      abstract:
+        description: "paper abstract (optional; will be fetched from arXiv if empty)"
+        required: false
+      authors:
+        description: "comma-separated authors (optional)"
+        required: false
+      categories:
+        description: "comma-separated arXiv categories (optional)"
+        required: false
+      date:
+        description: "paper date YYYY-MM-DD (optional)"
+        required: false
+      pdf:
+        description: "PDF url (optional)"
+        required: false
+
+concurrency:
+  group: enhance-single-${{ github.event.client_payload.id || github.event.inputs.id }}
+  cancel-in-progress: false
+
+jobs:
+  enhance-single:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          uv sync
+
+      - name: Resolve inputs
+        id: inputs
+        run: |
+          PAPER_ID="${{ github.event.client_payload.id || github.event.inputs.id }}"
+          TITLE="${{ github.event.client_payload.title || github.event.inputs.title }}"
+          ABSTRACT="${{ github.event.client_payload.abstract || github.event.inputs.abstract }}"
+          AUTHORS="${{ github.event.client_payload.authors || github.event.inputs.authors }}"
+          CATEGORIES="${{ github.event.client_payload.categories || github.event.inputs.categories }}"
+          DATE="${{ github.event.client_payload.date || github.event.inputs.date }}"
+          PDF="${{ github.event.client_payload.pdf || github.event.inputs.pdf }}"
+          if [ -z "$PAPER_ID" ]; then
+            echo "缺少 paper id / Missing paper id"
+            exit 1
+          fi
+          echo "paper_id=$PAPER_ID" >> $GITHUB_OUTPUT
+          # 用 GITHUB_ENV 而非 OUTPUT 传递可能包含换行/引号的长文本
+          {
+            echo "TITLE<<EOF_TITLE"
+            echo "$TITLE"
+            echo "EOF_TITLE"
+            echo "ABSTRACT<<EOF_ABS"
+            echo "$ABSTRACT"
+            echo "EOF_ABS"
+            echo "AUTHORS<<EOF_AUTH"
+            echo "$AUTHORS"
+            echo "EOF_AUTH"
+            echo "CATEGORIES<<EOF_CAT"
+            echo "$CATEGORIES"
+            echo "EOF_CAT"
+            echo "DATE=$DATE"
+            echo "PDF=$PDF"
+          } >> $GITHUB_ENV
+
+      - name: Fetch data branch (for existing favorites.jsonl)
+        run: |
+          mkdir -p /tmp/data_branch/data
+          if curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/data/data/favorites.jsonl" -o /tmp/data_branch/data/favorites.jsonl; then
+            echo "已拉取 favorites.jsonl"
+          else
+            echo "favorites.jsonl 不存在，使用空文件"
+            : > /tmp/data_branch/data/favorites.jsonl
+          fi
+          mkdir -p data
+          cp /tmp/data_branch/data/favorites.jsonl data/favorites.jsonl
+
+      - name: Run single enhancement
+        run: |
+          source .venv/bin/activate
+          cd ai
+          export OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          export OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }}
+          export TOKEN_GITHUB=${{ secrets.TOKEN_GITHUB }}
+          export LANGUAGE="${{ vars.LANGUAGE }}"
+          export MODEL_NAME="${{ vars.MODEL_NAME }}"
+          python enhance_single.py \
+            --id "${{ steps.inputs.outputs.paper_id }}" \
+            --title "$TITLE" \
+            --abstract "$ABSTRACT" \
+            --authors "$AUTHORS" \
+            --categories "$CATEGORIES" \
+            --date "$DATE" \
+            --pdf "$PDF" \
+            --data-dir ../data
+
+      - name: Stage updated favorites.jsonl
+        run: |
+          mkdir -p /tmp/out/data
+          cp data/favorites.jsonl /tmp/out/data/favorites.jsonl
+
+      - name: Commit results to data branch
+        run: |
+          git config --global user.email "${{ vars.EMAIL }}"
+          git config --global user.name "${{ vars.NAME }}"
+
+          rm -f data/favorites.jsonl 2>/dev/null || true
+
+          if git ls-remote --heads origin data | grep -q data; then
+            git fetch origin data:data
+            git checkout data
+            git pull origin data || true
+          else
+            git checkout --orphan data
+            git rm -rf --cached . 2>/dev/null || true
+            mkdir -p data
+            echo "# Data Branch" > README.md
+            git add README.md
+            git commit -m "chore: initialize data branch"
+            git push origin data
+          fi
+
+          mkdir -p data
+          cp /tmp/out/data/favorites.jsonl data/favorites.jsonl
+          git add data/favorites.jsonl
+
+          if git diff --staged --quiet; then
+            echo "没有变更需要提交"
+          else
+            git commit -m "enhance: backfill ${{ steps.inputs.outputs.paper_id }}"
+          fi
+
+      - name: Push to data branch
+        run: |
+          git config pull.rebase true
+          git config rebase.autoStash true
+          for i in {1..3}; do
+            echo "推送尝试 $i"
+            if git push origin data; then
+              echo "推送成功"
+              break
+            else
+              echo "推送失败，拉取后重试..."
+              git pull origin data --no-edit || true
+              if [ $i -eq 3 ]; then
+                echo "3 次尝试后推送失败"
+                exit 1
+              fi
+            fi
+          done
