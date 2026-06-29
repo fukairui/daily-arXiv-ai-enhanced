@@ -97,11 +97,21 @@
 .add-arxiv-status.info { color: var(--primary, #4f46e5); }
 
 /* ===== 深度分析 Markdown 弹窗 ===== */
+/* 深度弹窗使用独立滚动模型：遮罩层不滚，content 固定在视口里，仅内部预览滚 */
+#deepModal {
+  overflow: hidden !important;
+  align-items: center !important;
+  /* overscroll 防止滚轮冒泡到 body */
+  overscroll-behavior: contain;
+}
 .deep-modal-content {
   width: min(1100px, 96vw);
+  height: min(880px, 92vh);
   max-height: 92vh;
+  margin: 0;
   display: flex;
   flex-direction: column;
+  overscroll-behavior: contain;
 }
 
 /* 全屏模式：把弹窗撑满整个视口，并让工作区可以左右分栏 */
