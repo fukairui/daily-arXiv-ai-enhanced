@@ -435,6 +435,29 @@
   text-align: center;
 }
 
+.favorite-ai-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: #a42c25;
+  border-color: rgba(164, 44, 37, 0.26);
+  background: linear-gradient(135deg, rgba(164, 44, 37, 0.08), rgba(245, 158, 11, 0.10));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+.favorite-ai-btn:hover {
+  color: #8f241f;
+  border-color: rgba(164, 44, 37, 0.45);
+  background: linear-gradient(135deg, rgba(164, 44, 37, 0.12), rgba(245, 158, 11, 0.16));
+  transform: translateY(-1px);
+}
+
+.favorite-ai-spark {
+  font-size: 12px;
+  line-height: 1;
+}
+
 .unfav-btn {
   color: #b91c1c;
 }

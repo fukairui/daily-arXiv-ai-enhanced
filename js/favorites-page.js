@@ -225,6 +225,16 @@ function renderFavoriteInfo(m) {
     return rows.length ? `<div class="favorite-info-grid">${rows.join('')}</div>` : '';
 }
 
+function buildChatGPTPaperPrompt(id, meta) {
+    const title = meta.title || id;
+    const pdf = meta.pdf || `https://arxiv.org/pdf/${id}`;
+    return `请你阅读并分析这篇论文：${title}\n${pdf}\n请用中文给出结构化解读。`;
+}
+
+function buildChatGPTPaperUrl(id, meta) {
+    return `https://chatgpt.com/?q=${encodeURIComponent(buildChatGPTPaperPrompt(id, meta || {}))}`;
+}
+
 function getTagSuggestions(query) {
     const q = normalizeTagName(query).toLowerCase();
     if (!q) return [];
@@ -340,6 +350,7 @@ function renderList() {
         const tagsHtml = renderTagBadges(tags, id);
         const summaryText = m.summary || '';
         const infoHtml = renderFavoriteInfo(m);
+        const chatgptUrl = buildChatGPTPaperUrl(id, m);
 
         const statusHtml = deep
             ? '<span class="deep-status done">已深度分析</span>'
@@ -381,6 +392,9 @@ function renderList() {
             </div>
             <div class="fav-card-actions">
                 <a class="button icon-button" href="${escapeHtml(m.abs || ('https://arxiv.org/abs/' + id))}" target="_blank" title="arXiv">abs</a>
+                <a class="button favorite-ai-btn" href="${escapeHtml(chatgptUrl)}" target="_blank" title="用 ChatGPT 分析论文" aria-label="用 ChatGPT 分析论文">
+                    <span class="favorite-ai-spark">✦</span><span>AI</span>
+                </a>
                 ${deep ? `<button class="button view-deep-btn" data-id="${escapeHtml(id)}">查看分析</button>` : ''}
                 <button class="button primary analyze-btn" data-id="${escapeHtml(id)}">${deep ? '重跑分析' : '深度分析'}</button>
                 <button class="button unfav-btn" data-id="${escapeHtml(id)}" title="取消收藏">✕</button>
