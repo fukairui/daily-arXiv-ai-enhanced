@@ -704,10 +704,20 @@ function renderMarkdownInto(el, mdText) {
     if (!el) return;
     let html;
     try {
-        // 安全配置 marked：GFM + 换行 + 不抛出
+        // 安全配置 marked：GFM + 换行 + 不抛出 + 行号注入（便于编辑/预览双向同步）
         if (typeof marked !== 'undefined') {
             marked.setOptions({ gfm: true, breaks: false, mangle: false, headerIds: true });
-            html = marked.parse(mdText || '');
+            const tokens = marked.lexer(mdText || '');
+            // 给顶层块级元素附加 data-md-line 行号
+            const renderer = new marked.Renderer();
+            const wrapWith = (origFn) => function(...args) {
+                const out = origFn.apply(this, args);
+                return out;
+            };
+            // marked 12 的 token 自带 raw 信息但 renderer 没有 line。
+            // 采用 walkTokens 在生成 HTML 后逐段注入 data-md-line。
+            html = marked.parser(tokens, { renderer });
+            html = annotateHtmlLines(html, tokens);
         } else {
             html = `<pre>${escapeHtml(mdText || '')}</pre>`;
         }
@@ -715,7 +725,7 @@ function renderMarkdownInto(el, mdText) {
         html = `<pre>${escapeHtml(mdText || '')}</pre>`;
     }
     if (typeof DOMPurify !== 'undefined') {
-        el.innerHTML = DOMPurify.sanitize(html, { ADD_ATTR: ['target'] });
+        el.innerHTML = DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'data-md-line'] });
     } else {
         el.innerHTML = html;
     }
@@ -741,6 +751,44 @@ function renderMarkdownInto(el, mdText) {
     }
     // 链接默认新标签打开
     el.querySelectorAll('a[href^="http"]').forEach(a => a.setAttribute('target', '_blank'));
+}
+
+/**
+ * 按顺序给 html 中的顶层块级 tag 注入 data-md-line。
+ * 不是字符级精确映射，但够用：每个顶层 token 对应一个块，按起始行号写入。
+ */
+function annotateHtmlLines(html, tokens) {
+    // 计算每个 token 对应的起始行号
+    let line = 1;
+    const linesPerToken = [];
+    tokens.forEach(t => {
+        linesPerToken.push(line);
+        const raw = (t.raw != null) ? String(t.raw) : '';
+        // 一个 token 占的行数：raw 里 \n 的数量；space token 也要算
+        const nl = (raw.match(/\n/g) || []).length;
+        line += Math.max(nl, 0);
+    });
+
+    // 用 DOMParser 解析 HTML，按顺序给顶层子节点写 data-md-line
+    let doc;
+    try {
+        doc = new DOMParser().parseFromString(`<div id="__root__">${html}</div>`, 'text/html');
+    } catch (e) {
+        return html;
+    }
+    const root = doc.getElementById('__root__');
+    if (!root) return html;
+    const blocks = Array.from(root.children);
+    let cursor = 0;
+    blocks.forEach(node => {
+        // 跳过 marked 输出的 space token（通常不会出现在 children 里）
+        while (cursor < tokens.length && tokens[cursor].type === 'space') cursor++;
+        if (cursor < tokens.length) {
+            node.setAttribute('data-md-line', String(linesPerToken[cursor]));
+            cursor++;
+        }
+    });
+    return root.innerHTML;
 }
 
 function showDeepModal(id) {
@@ -777,11 +825,94 @@ function setDeepEditMode(editing) {
     const toggle = document.getElementById('deepEditToggle');
     const saveBtn = document.getElementById('deepSaveBtn');
     const workbench = document.getElementById('deepWorkbench');
+    const syncBar = document.getElementById('deepSyncBar');
     pane.style.display = editing ? '' : 'none';
     toggle.textContent = editing ? '完成编辑' : '编辑';
     saveBtn.style.display = editing ? '' : 'none';
     // 编辑态：开启左右分栏。仅在编辑时显示 split。
     if (workbench) workbench.classList.toggle('split', !!editing);
+    // 编辑态才显示同步条（Overleaf 风格左右箭头）
+    if (syncBar) syncBar.style.display = editing ? '' : 'none';
+}
+
+/* ---------- 编辑/预览双向同步（Overleaf 风格） ---------- */
+
+/** 当前光标所在的 Markdown 行号（1-based）。 */
+function getEditorCursorLine() {
+    const ta = document.getElementById('deepMarkdownInput');
+    if (!ta) return 1;
+    const before = ta.value.slice(0, ta.selectionStart);
+    return (before.match(/\n/g) || []).length + 1;
+}
+
+/** 把 textarea 的光标移动到给定行的开头，并滚动可见。 */
+function setEditorCursorToLine(lineNo) {
+    const ta = document.getElementById('deepMarkdownInput');
+    if (!ta) return;
+    const text = ta.value || '';
+    const lines = text.split('\n');
+    const target = Math.max(1, Math.min(lineNo, lines.length));
+    let offset = 0;
+    for (let i = 0; i < target - 1; i++) offset += lines[i].length + 1;
+    ta.focus();
+    ta.setSelectionRange(offset, offset);
+    // 用文本高度近似估算 scrollTop：行高从样式取
+    const style = window.getComputedStyle(ta);
+    const lh = parseFloat(style.lineHeight) || 20;
+    const targetTop = (target - 1) * lh;
+    // 让目标行尽量靠上 1/4 处
+    ta.scrollTop = Math.max(0, targetTop - ta.clientHeight * 0.25);
+}
+
+/** 找到预览区里 data-md-line 最接近且 <= 目标行号的元素。 */
+function findPreviewElementForLine(targetLine) {
+    const preview = document.getElementById('deepPreview');
+    if (!preview) return null;
+    const nodes = Array.from(preview.querySelectorAll('[data-md-line]'));
+    if (nodes.length === 0) return null;
+    let best = nodes[0];
+    let bestLine = parseInt(best.getAttribute('data-md-line'), 10) || 1;
+    for (const n of nodes) {
+        const ln = parseInt(n.getAttribute('data-md-line'), 10) || 1;
+        if (ln <= targetLine && ln >= bestLine) {
+            best = n;
+            bestLine = ln;
+        }
+    }
+    return best;
+}
+
+/** 找到预览区当前滚动顶部能看到的第一个块的 data-md-line。 */
+function findCurrentPreviewLine() {
+    const preview = document.getElementById('deepPreview');
+    if (!preview) return 1;
+    const previewTop = preview.getBoundingClientRect().top;
+    const nodes = Array.from(preview.querySelectorAll('[data-md-line]'));
+    let chosen = null;
+    for (const n of nodes) {
+        const rect = n.getBoundingClientRect();
+        if (rect.bottom >= previewTop + 4) { chosen = n; break; }
+    }
+    if (!chosen && nodes.length) chosen = nodes[nodes.length - 1];
+    if (!chosen) return 1;
+    return parseInt(chosen.getAttribute('data-md-line'), 10) || 1;
+}
+
+/** 编辑 → 预览：让预览滚动到光标所在行对应的块。 */
+function syncEditorToPreview() {
+    const line = getEditorCursorLine();
+    const node = findPreviewElementForLine(line);
+    if (!node) return;
+    // 高亮一下，便于视觉确认
+    node.classList.add('deep-sync-flash');
+    setTimeout(() => node.classList.remove('deep-sync-flash'), 1500);
+    node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/** 预览 → 编辑：把光标跳到预览顶部对应的行。 */
+function syncPreviewToEditor() {
+    const line = findCurrentPreviewLine();
+    setEditorCursorToLine(line);
 }
 
 let deepFullscreenPref = false;
@@ -870,6 +1001,11 @@ function bindModal() {
 
     const fsBtn = document.getElementById('deepFullscreenToggle');
     if (fsBtn) fsBtn.addEventListener('click', () => setDeepFullscreen(!deepFullscreenPref));
+
+    const syncFromEditorBtn = document.getElementById('deepSyncFromEditor');
+    if (syncFromEditorBtn) syncFromEditorBtn.addEventListener('click', syncEditorToPreview);
+    const syncFromPreviewBtn = document.getElementById('deepSyncFromPreview');
+    if (syncFromPreviewBtn) syncFromPreviewBtn.addEventListener('click', syncPreviewToEditor);
 
     const textarea = document.getElementById('deepMarkdownInput');
     if (textarea) {

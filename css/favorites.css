@@ -178,6 +178,59 @@
   color: var(--text-secondary, #64748b);
 }
 
+/* Overleaf 风格同步条 */
+.deep-sync-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  background: #f5f7fa;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+
+.deep-sync-arrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-color, #d4d4d8);
+  background: #fff;
+  color: var(--primary, #4f46e5);
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.deep-sync-arrow:hover {
+  background: rgba(99, 102, 241, 0.08);
+  box-shadow: 0 1px 4px rgba(99, 102, 241, 0.12);
+}
+
+.deep-sync-arrow svg {
+  vertical-align: middle;
+}
+
+.deep-sync-hint {
+  flex: 1;
+  text-align: center;
+  color: var(--text-secondary, #64748b);
+}
+
+/* 跳转高亮动画：预览区被同步到的块会闪一下 */
+@keyframes deepSyncFlashAnim {
+  0%   { background: rgba(99, 102, 241, 0.20); }
+  100% { background: rgba(99, 102, 241, 0);    }
+}
+.deep-preview .deep-sync-flash {
+  animation: deepSyncFlashAnim 1.4s ease-out;
+  border-radius: 4px;
+}
+
 .deep-edit-pane {
   border: 1px solid var(--border-color, #e2e8f0);
   border-radius: 8px;

@@ -126,6 +126,22 @@
                 </div>
                 <div class="paper-modal-body deep-modal-body">
                     <p class="deep-meta-line" id="deepMetaLine"></p>
+                    <!-- Overleaf 风格同步条：左箭头 = 把编辑光标跳到当前预览位置；右箭头 = 把预览滚动到光标位置 -->
+                    <div class="deep-sync-bar" id="deepSyncBar" style="display:none;">
+                        <button id="deepSyncFromPreview" class="deep-sync-arrow" type="button" title="将编辑光标跳到当前预览顶部对应行">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M20 12H4M4 12l6-6M4 12l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>预览 → 编辑</span>
+                        </button>
+                        <span class="deep-sync-hint" id="deepSyncHint">提示：编辑或滚动时不会自动跟随，点箭头主动同步。</span>
+                        <button id="deepSyncFromEditor" class="deep-sync-arrow" type="button" title="将预览滚动到当前光标所在位置">
+                            <span>编辑 → 预览</span>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M4 12h16M14 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
                     <div class="deep-workbench" id="deepWorkbench">
                         <div class="deep-edit-pane" id="deepEditPane" style="display:none;">
                             <textarea id="deepMarkdownInput" spellcheck="false" placeholder="在此编辑论文精读（Markdown，支持 KaTeX 公式与 GFM 表格）..."></textarea>
