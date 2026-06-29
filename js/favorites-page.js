@@ -15,6 +15,7 @@ const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 轮询超时
 let activeTagFilter = null;       // 当前 TAG 筛选；null 表示全部
 let deepCache = {};               // id -> deep json
 let knownTags = [];               // tags.json 中的标签
+let activeSearch = '';            // 当前搜索关键字（小写）
 const SORT_PREF_KEY = 'fav_sort_pref';
 let activeSort = (() => {
     try { return localStorage.getItem(SORT_PREF_KEY) || 'favorited_desc'; }
@@ -27,6 +28,7 @@ async function init() {
     bindModal();
     bindManualAdd();
     bindSortControl();
+    bindSearchControl();
     await restoreFromRemote();
     if (GitHubClient.hasToken()) {
         const res = await Favorites.syncAllToRemote();
@@ -388,6 +390,52 @@ function bindSortControl() {
     });
 }
 
+/* ---------- 搜索：按标题/作者/机构/标签/摘要/中文 tldr/id 过滤 ---------- */
+function matchesSearch(id, m, query) {
+    if (!query) return true;
+    const tags = (m.tags || []).join(' ');
+    const hay = [
+        id,
+        m.title || '',
+        m.authors || '',
+        m.org_display || '',
+        m.industry_orgs || '',
+        m.details || '',
+        m.summary || '',
+        tags
+    ].join(' ').toLowerCase();
+    // 支持多关键词（空格分隔），必须全部命中（AND 语义）
+    const terms = query.split(/\s+/).filter(Boolean);
+    return terms.every(t => hay.includes(t));
+}
+
+function bindSearchControl() {
+    const input = document.getElementById('favSearchInput');
+    const clearBtn = document.getElementById('favSearchClear');
+    if (!input) return;
+    let timer = null;
+    const apply = () => {
+        activeSearch = (input.value || '').trim().toLowerCase();
+        if (clearBtn) clearBtn.style.visibility = activeSearch ? 'visible' : 'hidden';
+        render();
+    };
+    if (clearBtn) {
+        clearBtn.style.visibility = 'hidden';
+        clearBtn.addEventListener('click', () => {
+            input.value = '';
+            apply();
+            input.focus();
+        });
+    }
+    input.addEventListener('input', () => {
+        clearTimeout(timer);
+        timer = setTimeout(apply, 120);
+    });
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { input.value = ''; apply(); }
+    });
+}
+
 function renderList() {
     const container = document.getElementById('favoritesList');
     let ids = Favorites.getIds();
@@ -396,11 +444,17 @@ function renderList() {
     if (activeTagFilter) {
         ids = ids.filter(id => getPaperTags(id, meta).includes(activeTagFilter));
     }
+    if (activeSearch) {
+        ids = ids.filter(id => matchesSearch(id, meta[id] || {}, activeSearch));
+    }
     // 应用排序
     ids = sortIdsBy(ids, activeSort, meta);
 
     if (ids.length === 0) {
-        container.innerHTML = '<div class="loading-container"><p>还没有收藏，去主页点星收藏论文吧。</p></div>';
+        const msg = activeSearch
+            ? `没有匹配「${escapeHtml(activeSearch)}」的收藏。试着换个关键词或清除搜索。`
+            : '还没有收藏，去主页点星收藏论文吧。';
+        container.innerHTML = `<div class="loading-container"><p>${msg}</p></div>`;
         return;
     }
 

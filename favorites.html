@@ -97,9 +97,13 @@
                     <div id="pendingTagsList" class="pending-tags-list"></div>
                 </div>
 
-                <!-- TAG 筛选条 + 排序控件 -->
+                <!-- TAG 筛选条 + 搜索 + 排序控件 -->
                 <div class="fav-controls-bar">
                     <div id="tagFilterBar" class="tag-filter-bar"></div>
+                    <div class="fav-search-wrap">
+                        <input id="favSearchInput" class="fav-search-input" type="search" autocomplete="off" placeholder="搜索标题/作者/机构/标签/摘要..." />
+                        <button id="favSearchClear" class="fav-search-clear" type="button" title="清除搜索" aria-label="清除搜索">✕</button>
+                    </div>
                     <label class="fav-sort-wrap">
                         <span>排序</span>
                         <select id="favSortSelect" class="fav-sort-select">
