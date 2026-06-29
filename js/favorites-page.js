@@ -377,10 +377,26 @@ function renderList() {
         btn.onclick = () => triggerDeepAnalysis(btn.dataset.id, btn);
     });
     container.querySelectorAll('.unfav-btn').forEach(btn => {
-        btn.onclick = () => {
-            Favorites.remove(btn.dataset.id);
-            delete deepCache[btn.dataset.id];
+        btn.onclick = async () => {
+            const id = btn.dataset.id;
+            if (!id) return;
+            if (!confirm('确定要取消收藏这篇论文吗？')) return;
+            btn.disabled = true;
+            // 1) 本地先删，UI 立即响应
+            Favorites.remove(id);
+            delete deepCache[id];
             render();
+            // 2) 远端同步删除，避免刷新后被 favorites.jsonl 恢复回来
+            if (GitHubClient.hasToken()) {
+                const res = await GitHubClient.updateFileWithRetry('data/favorites.jsonl', (old) => {
+                    const rows = Favorites.parseRemoteRows(old);
+                    const filtered = rows.filter(r => r.id !== id);
+                    return filtered.length ? filtered.map(r => JSON.stringify(r)).join('\n') + '\n' : '';
+                }, `favorites: remove ${id}`);
+                if (!res.ok) {
+                    alert(`远端取消收藏失败：${res.message || '未知错误'}\n刷新后可能仍会出现该收藏。`);
+                }
+            }
         };
     });
     container.querySelectorAll('.add-paper-tag-btn').forEach(btn => {
