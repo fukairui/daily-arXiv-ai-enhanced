@@ -126,6 +126,13 @@
   gap: 12px;
   flex: 1 1 auto;
   min-height: 0;
+  overflow: hidden;
+}
+/* 非编辑态：预览独占一栏，自己负责滚动 */
+.deep-workbench > .deep-preview {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 .deep-workbench.split {
   flex-direction: row;
@@ -168,8 +175,11 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow: auto;
+  /* 外层不滚动，让内部预览/编辑面板自己滚，避免双滚动容器吞掉滚轮事件导致"内容看不见" */
+  overflow: hidden;
   padding: 16px 20px 24px;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .deep-meta-line {
