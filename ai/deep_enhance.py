@@ -184,9 +184,10 @@ def fallback_pdf_figure_screenshots(pdf_bytes: bytes, paper_id: str, data_dir: s
             pix.save(fpath)
             rel = f"data/figures/{paper_id}/{fname}"
             figures.append({
-                "label": f"Page {pidx + 1}",
-                "caption": f"Page {pidx + 1} of the PDF (auto-rendered fallback because no figure-tagged HTML was found).",
+                "label": f"Page {pidx + 1} [LOW-QUALITY full-page fallback]",
+                "caption": f"WARNING: full-page screenshot of PDF page {pidx + 1}. Contains everything on that page (text + figures + headers/footers). DO NOT use this in the analysis unless absolutely necessary.",
                 "src": _figures_public_url(paper_id, rel),
+                "kind": "pdf_full_page",
             })
         except Exception as e:
             print(f"fallback render page {pidx} failed: {e}", file=sys.stderr)
