@@ -700,24 +700,55 @@ function getDeepMarkdown(obj) {
     return legacyDeepToMarkdown(obj.deep || {});
 }
 
+/**
+ * 把 Markdown 中的 $...$、$$...$$、\(...\)、\[...\] 公式片段抽出来用占位符替换，
+ * 防止 marked 把 \sum \theta \tau 等反斜杠当作 Markdown 转义字符吃掉。
+ * 渲染完 HTML 后再调用 restoreMathSegments 把占位符换回原始公式串。
+ */
+function protectMathSegments(text) {
+    if (!text) return { masked: '', slots: [] };
+    const slots = [];
+    // 顺序：先 $$...$$（含跨行），再 \[...\]，再 $...$（单行），再 \(...\)
+    let out = text;
+    const push = (raw) => {
+        const idx = slots.length;
+        slots.push(raw);
+        // 占位符故意用纯字母数字以免被 marked 处理掉；同时不含反斜杠/美元
+        return `MATHSLOTZ${idx}ZMATHSLOTEND`;
+    };
+    out = out.replace(/\$\$([\s\S]+?)\$\$/g, (m) => push(m));
+    out = out.replace(/\\\[([\s\S]+?)\\\]/g, (m) => push(m));
+    // $...$：避免误伤价格 ($100) —— 要求两端必须紧贴非空白且中间至少一个非空白
+    out = out.replace(/(?<![\\\$])\$([^\n\$]+?)\$(?!\d)/g, (m) => push(m));
+    out = out.replace(/\\\(([\s\S]+?)\\\)/g, (m) => push(m));
+    return { masked: out, slots };
+}
+
+/** 把渲染后的 HTML 中的占位符替换回原始公式串，交给 KaTeX 渲染。 */
+function restoreMathSegments(html, slots) {
+    if (!html || !slots || slots.length === 0) return html;
+    return html.replace(/MATHSLOTZ(\d+)ZMATHSLOTEND/g, (_, idx) => {
+        const raw = slots[Number(idx)];
+        return raw != null ? raw : '';
+    });
+}
+
 function renderMarkdownInto(el, mdText) {
     if (!el) return;
     let html;
     try {
-        // 安全配置 marked：GFM + 换行 + 不抛出 + 行号注入（便于编辑/预览双向同步）
+        // 1) 先把 $$...$$ / $...$ 公式抽出来用占位符替换，避免 marked 把 \sum \theta 等
+        //    反斜杠当作 Markdown 转义字符吃掉，导致 KaTeX 拿到的不是合法 LaTeX。
+        const { masked, slots } = protectMathSegments(mdText || '');
         if (typeof marked !== 'undefined') {
             marked.setOptions({ gfm: true, breaks: false, mangle: false, headerIds: true });
-            const tokens = marked.lexer(mdText || '');
+            const tokens = marked.lexer(masked);
             // 给顶层块级元素附加 data-md-line 行号
             const renderer = new marked.Renderer();
-            const wrapWith = (origFn) => function(...args) {
-                const out = origFn.apply(this, args);
-                return out;
-            };
-            // marked 12 的 token 自带 raw 信息但 renderer 没有 line。
-            // 采用 walkTokens 在生成 HTML 后逐段注入 data-md-line。
             html = marked.parser(tokens, { renderer });
             html = annotateHtmlLines(html, tokens);
+            // 2) marked 渲染完后再把占位符替换回原始 $...$ / $$...$$，交给 KaTeX 渲染
+            html = restoreMathSegments(html, slots);
         } else {
             html = `<pre>${escapeHtml(mdText || '')}</pre>`;
         }
