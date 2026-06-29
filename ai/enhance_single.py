@@ -152,6 +152,38 @@ def _run_chain(item: Dict, language: str, model_name: str) -> Dict:
     return item
 
 
+def _infer_affiliation_type(ai_or_row: Dict) -> Dict:
+    """根据 industry_orgs / org_display 推断 affiliation_type 与 is_industrial_paper。
+
+    放在最末端做兜底，避免上游 LLM 漏字段或落盘合并逻辑覆盖回 unknown。
+    返回新的 dict（不修改原对象）。
+    """
+    out = dict(ai_or_row or {})
+    industry_orgs_str = (out.get("industry_orgs") or "").strip()
+    org_display_str = (out.get("org_display") or "").strip()
+    affiliation_type = (out.get("affiliation_type") or "").strip().lower()
+
+    if industry_orgs_str and affiliation_type in ("", "unknown"):
+        industry_set = {o.strip().lower() for o in industry_orgs_str.split(",") if o.strip()}
+        org_set = {o.strip().lower() for o in org_display_str.split(",") if o.strip()}
+        if org_set and org_set <= industry_set:
+            affiliation_type = "industry"
+        else:
+            affiliation_type = "collaboration"
+    elif not industry_orgs_str and org_display_str and affiliation_type in ("", "unknown"):
+        # 只有学术机构、没有工业界 → academia
+        affiliation_type = "academia"
+
+    if not affiliation_type:
+        affiliation_type = "unknown"
+    out["affiliation_type"] = affiliation_type
+    if affiliation_type in ("industry", "collaboration"):
+        out["is_industrial_paper"] = True
+    elif "is_industrial_paper" not in out:
+        out["is_industrial_paper"] = False
+    return out
+
+
 def _backfill_favorites(data_dir: str, paper_id: str, item: Dict):
     """把 enhance 出的 AI 字段 + 基础元数据回填到 data/favorites.jsonl。
     保留用户手动维护的 tags / summary（如果已经存在则不覆盖）。
@@ -173,6 +205,16 @@ def _backfill_favorites(data_dir: str, paper_id: str, item: Dict):
     rows = [r for r in rows if r.get("id") != paper_id]
 
     ai = item.get("AI") or {}
+
+    # 关键：写入前再做一次推断兜底，避免上游漏字段或合并逻辑把 affiliation_type 残留为 unknown。
+    merged_for_infer = {
+        "org_display": ai.get("org_display") or old_row.get("org_display") or "",
+        "industry_orgs": ai.get("industry_orgs") or old_row.get("industry_orgs") or "",
+        "affiliation_type": ai.get("affiliation_type") or "",
+        "is_industrial_paper": ai.get("is_industrial_paper", False),
+    }
+    inferred = _infer_affiliation_type(merged_for_infer)
+
     new_row = dict(old_row) if old_row else {}
     new_row.update({
         "id": paper_id,
@@ -187,10 +229,10 @@ def _backfill_favorites(data_dir: str, paper_id: str, item: Dict):
         # 中文 tldr → summary（前端「简要摘要」字段）。不覆盖用户已手填内容。
         "summary": old_row.get("summary") or ai.get("tldr") or "",
         "is_ab_test": bool(ai.get("is_ab_test", old_row.get("is_ab_test", False))),
-        "is_industrial_paper": bool(ai.get("is_industrial_paper", old_row.get("is_industrial_paper", False))),
-        "affiliation_type": ai.get("affiliation_type") or old_row.get("affiliation_type") or "unknown",
-        "org_display": ai.get("org_display") or old_row.get("org_display") or "",
-        "industry_orgs": ai.get("industry_orgs") or old_row.get("industry_orgs") or "",
+        "is_industrial_paper": bool(inferred.get("is_industrial_paper", False)),
+        "affiliation_type": inferred.get("affiliation_type") or "unknown",
+        "org_display": merged_for_infer["org_display"],
+        "industry_orgs": merged_for_infer["industry_orgs"],
         "code_url": item.get("code_url") or old_row.get("code_url") or "",
         "code_stars": item.get("code_stars") or old_row.get("code_stars") or 0,
         "tags": old_row.get("tags") or [],
