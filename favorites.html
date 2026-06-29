@@ -115,6 +115,7 @@
                     <div class="deep-modal-toolbar">
                         <button id="deepEditToggle" class="button" type="button">编辑</button>
                         <button id="deepSaveBtn" class="button primary" type="button" style="display:none;">保存到远端</button>
+                        <button id="deepFullscreenToggle" class="button" type="button" title="全屏切换 (F)">全屏</button>
                         <span id="deepSaveStatus" class="deep-save-status"></span>
                         <button id="closeDeepModal" class="icon-button" title="关闭">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -125,10 +126,12 @@
                 </div>
                 <div class="paper-modal-body deep-modal-body">
                     <p class="deep-meta-line" id="deepMetaLine"></p>
-                    <div class="deep-edit-pane" id="deepEditPane" style="display:none;">
-                        <textarea id="deepMarkdownInput" spellcheck="false" placeholder="在此编辑论文精读（Markdown，支持 KaTeX 公式与 GFM 表格）..."></textarea>
+                    <div class="deep-workbench" id="deepWorkbench">
+                        <div class="deep-edit-pane" id="deepEditPane" style="display:none;">
+                            <textarea id="deepMarkdownInput" spellcheck="false" placeholder="在此编辑论文精读（Markdown，支持 KaTeX 公式与 GFM 表格）..."></textarea>
+                        </div>
+                        <article class="deep-preview markdown-body" id="deepPreview"></article>
                     </div>
-                    <article class="deep-preview markdown-body" id="deepPreview"></article>
                 </div>
             </div>
         </div>

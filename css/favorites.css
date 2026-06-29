@@ -104,6 +104,47 @@
   flex-direction: column;
 }
 
+/* 全屏模式：把弹窗撑满整个视口，并让工作区可以左右分栏 */
+.deep-modal-content.fullscreen {
+  width: 100vw;
+  max-width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  border-radius: 0;
+  margin: 0;
+}
+
+.deep-modal-content.fullscreen .deep-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* 工作区：未编辑时只渲染；编辑时左右分栏 */
+.deep-workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.deep-workbench.split {
+  flex-direction: row;
+  align-items: stretch;
+}
+.deep-workbench.split > .deep-edit-pane,
+.deep-workbench.split > .deep-preview {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  max-height: none;
+  overflow: auto;
+}
+.deep-workbench.split > .deep-edit-pane textarea {
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+}
+
 .deep-modal-toolbar {
   display: flex;
   align-items: center;
@@ -141,16 +182,18 @@
   border: 1px solid var(--border-color, #e2e8f0);
   border-radius: 8px;
   background: #fbfbfd;
+  display: flex;
 }
 
 .deep-edit-pane textarea {
+  flex: 1 1 auto;
   width: 100%;
   min-height: 320px;
   max-height: 50vh;
   border: none;
   border-radius: 8px;
   padding: 12px 14px;
-  font: 13px/1.55 "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 13.5px/1.65 "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   resize: vertical;
   background: transparent;
   color: var(--text-primary, #1a202c);

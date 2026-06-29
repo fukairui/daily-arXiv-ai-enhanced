@@ -764,6 +764,8 @@ function showDeepModal(id) {
     // 默认进入只读预览模式
     setDeepEditMode(false);
     setDeepSaveStatus('');
+    // 默认非全屏，但记住上一次的偏好
+    setDeepFullscreen(deepFullscreenPref);
 
     const modal = document.getElementById('deepModal');
     modal.classList.add('active');
@@ -774,9 +776,23 @@ function setDeepEditMode(editing) {
     const pane = document.getElementById('deepEditPane');
     const toggle = document.getElementById('deepEditToggle');
     const saveBtn = document.getElementById('deepSaveBtn');
+    const workbench = document.getElementById('deepWorkbench');
     pane.style.display = editing ? '' : 'none';
     toggle.textContent = editing ? '完成编辑' : '编辑';
     saveBtn.style.display = editing ? '' : 'none';
+    // 编辑态：开启左右分栏。仅在编辑时显示 split。
+    if (workbench) workbench.classList.toggle('split', !!editing);
+}
+
+let deepFullscreenPref = false;
+
+function setDeepFullscreen(on) {
+    const content = document.querySelector('#deepModal .deep-modal-content');
+    const btn = document.getElementById('deepFullscreenToggle');
+    if (!content) return;
+    content.classList.toggle('fullscreen', !!on);
+    if (btn) btn.textContent = on ? '退出全屏' : '全屏';
+    deepFullscreenPref = !!on;
 }
 
 function setDeepSaveStatus(text, kind) {
@@ -830,7 +846,17 @@ function bindModal() {
     const close = () => { modal.classList.remove('active'); document.body.style.overflow = ''; };
     document.getElementById('closeDeepModal').onclick = close;
     modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    document.addEventListener('keydown', (e) => {
+        if (!modal.classList.contains('active')) return;
+        if (e.key === 'Escape') { close(); return; }
+        // 在非输入区域按 F 切换全屏；输入框内的 F 应保留默认输入
+        const target = e.target;
+        const isTyping = target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.isContentEditable);
+        if (!isTyping && (e.key === 'f' || e.key === 'F') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+            e.preventDefault();
+            setDeepFullscreen(!deepFullscreenPref);
+        }
+    });
 
     const editToggle = document.getElementById('deepEditToggle');
     if (editToggle) {
@@ -841,6 +867,9 @@ function bindModal() {
     }
     const saveBtn = document.getElementById('deepSaveBtn');
     if (saveBtn) saveBtn.addEventListener('click', saveDeepMarkdownToRemote);
+
+    const fsBtn = document.getElementById('deepFullscreenToggle');
+    if (fsBtn) fsBtn.addEventListener('click', () => setDeepFullscreen(!deepFullscreenPref));
 
     const textarea = document.getElementById('deepMarkdownInput');
     if (textarea) {
