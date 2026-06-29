@@ -12,6 +12,7 @@ import requests
 import dotenv
 import argparse
 from tqdm import tqdm
+import fitz  # PyMuPDF
 
 import langchain_core.exceptions
 from langchain_openai import ChatOpenAI
@@ -26,6 +27,35 @@ if os.path.exists('.env'):
     dotenv.load_dotenv()
 template = open("template.txt", "r").read()
 system = open("system.txt", "r").read()
+
+def extract_affiliations_from_pdf(pdf_url: str) -> str:
+    """AI 回填时的兜底机构提取：历史原始 jsonl 机构为空时，重新从 PDF 前几页提取。"""
+    if not pdf_url:
+        return ""
+    try:
+        resp = requests.get(pdf_url, timeout=45)
+        resp.raise_for_status()
+        doc = fitz.open(stream=resp.content, filetype="pdf")
+        page_texts = []
+        for page in doc[:min(3, len(doc))]:
+            page_texts.append(page.get_text())
+        doc.close()
+        text = "\n".join(page_texts)
+        head = re.split(r"\b(Abstract|Introduction|1\s+Introduction)\b", text, maxsplit=1, flags=re.I)[0]
+        return head.strip()[:1500]
+    except Exception as e:
+        print(f"Failed to backfill affiliations from {pdf_url}: {e}", file=sys.stderr)
+        return ""
+
+def ensure_affiliations(item: Dict) -> str:
+    affiliations = item.get('affiliations', '') or ''
+    if affiliations.strip():
+        return affiliations
+    pdf_url = item.get('pdf') or (f"https://arxiv.org/pdf/{item.get('id')}" if item.get('id') else '')
+    affiliations = extract_affiliations_from_pdf(pdf_url)
+    if affiliations:
+        item['affiliations'] = affiliations
+    return affiliations
 
 def parse_args():
     """解析命令行参数"""
@@ -130,10 +160,11 @@ def process_single_item(chain, item: Dict, language: str) -> Dict:
     }
     
     try:
+        affiliations = ensure_affiliations(item)
         response: Structure = chain.invoke({
             "language": language,
             "content": item['summary'],
-            "affiliations": item.get('affiliations', '')
+            "affiliations": affiliations
         })
         item['AI'] = response.model_dump()
         # 一致性纠正:产学合作也算工业界参与

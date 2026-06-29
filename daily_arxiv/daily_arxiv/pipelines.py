@@ -25,17 +25,20 @@ class DailyArxivPipeline:
         self.fetch_pdf = os.environ.get("FETCH_PDF", "true").lower() != "false"
 
     def extract_affiliations(self, pdf_url: str) -> str:
-        """下载 PDF 首页并提取 Abstract 之前的作者机构文本。失败返回空字符串。"""
+        """下载 PDF 前几页并提取摘要前的作者机构文本。失败返回空字符串。"""
         if not self.fetch_pdf:
             return ""
         try:
-            resp = requests.get(pdf_url, timeout=20)
+            resp = requests.get(pdf_url, timeout=45)
             resp.raise_for_status()
             doc = fitz.open(stream=resp.content, filetype="pdf")
-            first_page = doc[0].get_text()
+            page_texts = []
+            for page in doc[:min(3, len(doc))]:
+                page_texts.append(page.get_text())
             doc.close()
-            # 取 Abstract 之前的部分(机构信息几乎都在首页作者下方、摘要之前)
-            head = re.split(r"\bAbstract\b", first_page, maxsplit=1, flags=re.I)[0]
+            # 取 Abstract/Introduction 之前的部分。部分论文首页排版复杂，Abstract 可能不在第一页。
+            text = "\n".join(page_texts)
+            head = re.split(r"\b(Abstract|Introduction|1\s+Introduction)\b", text, maxsplit=1, flags=re.I)[0]
             return head.strip()[:1500]
         except Exception as e:
             print(f"Failed to extract affiliations from {pdf_url}: {e}", file=sys.stderr)
