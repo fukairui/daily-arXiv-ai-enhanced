@@ -332,13 +332,51 @@
 /* 论文插图：居中、限宽，附 caption */
 .deep-preview img {
   display: block;
-  max-width: 100%;
+  max-width: min(640px, 100%);
+  max-height: 55vh;
+  width: auto;
   height: auto;
+  object-fit: contain;
   margin: 1em auto;
   border: 1px solid var(--border-color, #e2e8f0);
   border-radius: 6px;
   background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  cursor: zoom-in;
+}
+/* 全屏弹窗下图片可以稍微更大一些，但仍受视口高度约束 */
+.deep-modal-content.fullscreen .deep-preview img {
+  max-width: min(820px, 100%);
+  max-height: 70vh;
+}
+
+/* 点击放大查看的 lightbox */
+.deep-img-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 32px;
+  cursor: zoom-out;
+}
+.deep-img-lightbox.active { display: flex; flex-direction: column; }
+.deep-img-lightbox-img {
+  max-width: 95vw;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  background: #fff;
+}
+.deep-img-lightbox-caption {
+  margin-top: 12px;
+  color: #e5e7eb;
+  font-size: 13px;
+  text-align: center;
+  max-width: 90vw;
 }
 .deep-preview img[alt]:not([alt=""])::after {
   content: attr(alt);

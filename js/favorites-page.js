@@ -751,6 +751,38 @@ function renderMarkdownInto(el, mdText) {
     }
     // 链接默认新标签打开
     el.querySelectorAll('a[href^="http"]').forEach(a => a.setAttribute('target', '_blank'));
+    // 图片点击放大查看（lightbox）
+    el.querySelectorAll('img').forEach(img => {
+        if (img.dataset.lightboxBound === '1') return;
+        img.dataset.lightboxBound = '1';
+        img.addEventListener('click', () => openImageLightbox(img.src, img.alt));
+    });
+}
+
+/* ---------- 图片点击放大查看 (lightbox) ---------- */
+function openImageLightbox(src, alt) {
+    if (!src) return;
+    let overlay = document.getElementById('deepImgLightbox');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'deepImgLightbox';
+        overlay.className = 'deep-img-lightbox';
+        overlay.innerHTML = `
+            <img class="deep-img-lightbox-img" alt="">
+            <div class="deep-img-lightbox-caption"></div>
+        `;
+        overlay.addEventListener('click', () => overlay.classList.remove('active'));
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && overlay.classList.contains('active')) {
+                overlay.classList.remove('active');
+            }
+        });
+        document.body.appendChild(overlay);
+    }
+    overlay.querySelector('.deep-img-lightbox-img').src = src;
+    overlay.querySelector('.deep-img-lightbox-img').alt = alt || '';
+    overlay.querySelector('.deep-img-lightbox-caption').textContent = alt || '';
+    overlay.classList.add('active');
 }
 
 /**
