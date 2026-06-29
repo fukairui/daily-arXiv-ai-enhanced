@@ -102,11 +102,13 @@ const GitHubClient = {
      */
     getFile: async function(path) {
         try {
-            // 强制绕过浏览器与中间层缓存：加时间戳 query、no-store、跳过 ETag/If-None-Match。
-            // 否则在 read-modify-write 冲突重试时可能反复拿到旧 sha，导致 "does not match" 一直失败。
+            // 仅靠 URL 时间戳 + cache:'no-store' 绕过缓存。
+            // 不要再追加 Cache-Control / Pragma / If-None-Match 这类自定义头，
+            // 否则 PAT(Bearer) + 自定义头 会触发 CORS 预检，
+            // 某些网络/中间层下预检会被拦截，导致 fetch 直接 reject，
+            // 表现为 read-modify-write 8 次重试全部 "读取远端文件失败 (network)"。
             const url = `${this.API_BASE}/repos/${this._owner()}/${this._repo()}/contents/${path}?ref=${this._branch()}&_ts=${Date.now()}`;
-            const baseHeaders = this.hasToken() ? this._headers() : { 'Accept': 'application/vnd.github+json' };
-            const headers = { ...baseHeaders, 'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'If-None-Match': '' };
+            const headers = this.hasToken() ? this._headers() : { 'Accept': 'application/vnd.github+json' };
             const resp = await fetch(url, { headers, cache: 'no-store' });
             if (resp.status === 404) return { exists: false, status: 404 };
             if (!resp.ok) return { exists: false, status: resp.status };
@@ -118,7 +120,7 @@ const GitHubClient = {
                 content: body.content ? this._fromBase64(body.content) : ''
             };
         } catch (e) {
-            return { exists: false, status: 0 };
+            return { exists: false, status: 0, message: e && e.message ? e.message : 'network error' };
         }
     },
 
