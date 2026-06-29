@@ -124,13 +124,28 @@ def _run_chain(item: Dict, language: str, model_name: str) -> Dict:
         print(f"chain.invoke failed: {e}", file=sys.stderr)
         ai = dict(DEFAULT_AI_FIELDS)
 
-    # 一致性：industry / collaboration -> is_industrial_paper True
-    if ai.get("affiliation_type") in ("industry", "collaboration"):
-        ai["is_industrial_paper"] = True
-    # 给空字段填默认
+    # 1) 先给空字段补默认，避免后续判断 None
     for k, v in DEFAULT_AI_FIELDS.items():
         if ai.get(k) in (None, ""):
             ai[k] = v
+
+    # 2) 后验推断：如果 LLM 给出了 industry_orgs 但 affiliation_type 还是 unknown，
+    #    至少能确定属于「collaboration」或「industry」；这样不会再把 affiliation_type
+    #    错误地停留在 unknown，避免前端展示「未知」。
+    industry_orgs_str = (ai.get("industry_orgs") or "").strip()
+    org_display_str = (ai.get("org_display") or "").strip()
+    if ai.get("affiliation_type") in ("", "unknown") and industry_orgs_str:
+        industry_set = {o.strip().lower() for o in industry_orgs_str.split(",") if o.strip()}
+        org_set = {o.strip().lower() for o in org_display_str.split(",") if o.strip()}
+        if org_set and org_set <= industry_set:
+            ai["affiliation_type"] = "industry"
+        else:
+            ai["affiliation_type"] = "collaboration"
+
+    # 3) 一致性：industry / collaboration -> is_industrial_paper True
+    if ai.get("affiliation_type") in ("industry", "collaboration"):
+        ai["is_industrial_paper"] = True
+
     item["affiliations"] = affiliations
     item["AI"] = ai
     apply_affiliation_fallback(item, affiliations)
