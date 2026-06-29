@@ -771,12 +771,14 @@ async function fetchArxivMeta(id) {
             pdf: `https://arxiv.org/pdf/${id}`,
             authors,
             categories,
-            // details 保留为完整摘要；summary 同步填一份，UI 的「简要摘要」块就能直接显示。
+            // arXiv API 的 abstract 是论文官方英文摘要：放到 details；
+            // summary 字段保留给后端深度分析的中文 tldr / 用户手填，
+            // 否则卡片上的「简要摘要」会被英文 abstract 污染。
             details: abstract,
-            summary: abstract,
+            summary: '',
             is_ab_test: false,
             is_industrial_paper: false,
-            affiliation_type: orgDisplay ? 'unknown' : 'unknown',
+            affiliation_type: 'unknown',
             org_display: orgDisplay,
             industry_orgs: '',
             code_url: '',

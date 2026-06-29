@@ -3,7 +3,7 @@ Please produce an in-depth analysis of the following paper.
 Title:
 {title}
 
-Author affiliations (may be empty):
+Author affiliations (may be empty; if empty, you MUST extract authors and their affiliations yourself from the first page of the full text below):
 {affiliations}
 
 Known research-direction tags (the existing tag library, name: description):
@@ -18,11 +18,25 @@ Requirements:
 1. Fill every analysis field thoroughly and technically, based on the FULL TEXT (not just the abstract). Each prose field should be a detailed paragraph; list fields (innovations/limitations/future_work) should contain concrete bullet points.
 2. tags: choose the 1-3 MOST relevant tags from the known tag library above. The tag names you output here MUST exactly match existing tag names. If none of the known tags fit, leave tags empty.
 3. new_tags: ONLY if this paper clearly belongs to a brand-new research direction that none of the known tags can cover, propose new tag(s) here with a one-sentence description. Otherwise return an empty list. Never duplicate an existing tag in new_tags. Prefer reusing existing tags over creating new ones.
+4. summary_zh: write a 1~2 sentence Chinese TL;DR that captures the core contribution. Plain text, no markdown.
+5. authors: comma-separated authors extracted from the paper header (English names as they appear). Leave empty only if truly unidentifiable.
+6. org_display: comma-separated unique affiliations of the authors, exactly as printed in the paper (e.g. "Google DeepMind, MIT"). Do not invent affiliations.
+7. industry_orgs: subset of org_display containing only companies/industry labs (e.g. "Google DeepMind, ByteDance, Meta"). Universities/research institutes do NOT count. Leave empty if none.
+8. affiliation_type: must be one of "industry" / "academia" / "collaboration" / "unknown". Use "industry" only if every affiliation is a company; "academia" only if every affiliation is a university/research institute; "collaboration" if there is at least one of each; "unknown" if affiliations cannot be determined.
+9. is_industrial_paper: true iff affiliation_type is "industry" or "collaboration".
+10. is_ab_test: true iff the paper contains an online A/B test or live deployment evaluation.
 
 Output format:
 Return ONLY a valid JSON object. Do NOT wrap it in markdown fences. Do NOT add explanations before or after the JSON.
 The JSON object MUST have exactly these keys and compatible value types:
 {{
+  "summary_zh": "string",
+  "authors": "string",
+  "org_display": "string",
+  "industry_orgs": "string",
+  "affiliation_type": "industry|academia|collaboration|unknown",
+  "is_industrial_paper": true,
+  "is_ab_test": false,
   "background": "string",
   "problem": "string",
   "motivation": "string",

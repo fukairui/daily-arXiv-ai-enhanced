@@ -10,6 +10,14 @@ class NewTag(BaseModel):
 class DeepStructure(BaseModel):
     """Rich, paper-reading-level deep analysis of a single paper based on its full text."""
 
+    summary_zh: str = Field(default="", description="一段中文 tldr 总结（1~2 句话），用于在收藏列表卡片上的『简要摘要』直接展示。")
+    authors: str = Field(default="", description="作者列表（英文原文，多个作者用英文逗号分隔），从 PDF 首页提取。无法识别则留空。")
+    org_display: str = Field(default="", description="本论文所有去重后的作者机构名称（英文原文，多个机构用英文逗号分隔）。无法识别则留空。")
+    industry_orgs: str = Field(default="", description="本论文中的工业界 / 公司机构名称（英文原文，多个用英文逗号分隔），需是 org_display 的子集。无工业界机构则留空。")
+    affiliation_type: str = Field(default="unknown", description="论文作者机构构成：industry（全部工业界）/ academia（全部学术界）/ collaboration（产学合作）/ unknown（无法识别）。仅可取这四个值。")
+    is_industrial_paper: bool = Field(default=False, description="是否为工业界参与的论文。affiliation_type 为 industry 或 collaboration 时为 true。")
+    is_ab_test: bool = Field(default=False, description="是否包含线上 A/B 实验。")
+
     background: str = Field(description="领域背景与研究现状：该工作所处的研究领域、已有方法的局限，为读者建立上下文。要详尽，像论文 Related Work 的精炼。")
     problem: str = Field(description="本文要解决的核心问题，清晰准确地陈述。")
     motivation: str = Field(description="研究动机：为什么这个问题重要、为什么现有方法不足、作者的核心洞察。")

@@ -100,8 +100,14 @@ def append_pending_tags(data_dir: str, new_tags, paper_id: str):
         json.dump(pending, f, ensure_ascii=False, indent=2)
 
 
-def update_favorites_index(data_dir: str, paper_id: str, title: str, date: str, tags):
-    """更新/追加 data/favorites.jsonl 中该论文的索引行（按 id 去重，置 has_deep=true）。"""
+def update_favorites_index(data_dir: str, paper_id: str, title: str, date: str, tags, extra: dict | None = None):
+    """更新/追加 data/favorites.jsonl 中该论文的索引行（按 id 去重，置 has_deep=true）。
+
+    extra 字段会覆盖到该行：authors / org_display / industry_orgs / affiliation_type /
+    is_industrial_paper / is_ab_test / summary 等，但不会清空用户已经在前端编辑过的内容
+    （前端在编辑后会把对应字段写到本地 meta 与远端这条记录里；这里以远端旧行为基准，
+    仅在旧值为空/未知时用新值填充）。
+    """
     path = os.path.join(data_dir, "favorites.jsonl")
     rows = []
     if os.path.exists(path):
@@ -114,15 +120,51 @@ def update_favorites_index(data_dir: str, paper_id: str, title: str, date: str, 
                     rows.append(json.loads(line))
                 except Exception:
                     pass
+
+    old_row = next((r for r in rows if r.get("id") == paper_id), {})
     rows = [r for r in rows if r.get("id") != paper_id]
-    rows.append({
+
+    new_row = dict(old_row) if old_row else {}
+    new_row.update({
         "id": paper_id,
-        "title": title,
-        "date": date,
+        "title": title or old_row.get("title") or paper_id,
+        "date": date or old_row.get("date") or "",
         "tags": tags,
         "has_deep": True,
-        "favorited_at": datetime.now(timezone.utc).isoformat(),
+        "favorited_at": old_row.get("favorited_at") or datetime.now(timezone.utc).isoformat(),
     })
+
+    # 把 extra 字段以「只填充空值」的策略写入，避免覆盖用户在前端手动编辑过的内容。
+    extra = extra or {}
+    def _fill(field, value, allow_overwrite_unknown=False):
+        if value is None:
+            return
+        current = new_row.get(field)
+        if isinstance(value, str):
+            if not value.strip():
+                return
+            if current and str(current).strip() and not (allow_overwrite_unknown and current == "unknown"):
+                return
+            new_row[field] = value.strip()
+        elif isinstance(value, bool):
+            # 仅在旧值缺失时填入；用户/已有 True 不要被覆盖回 False
+            if field not in new_row or new_row.get(field) in (None, "", False):
+                new_row[field] = value
+        else:
+            if current in (None, "", []):
+                new_row[field] = value
+
+    _fill("authors", extra.get("authors"))
+    _fill("org_display", extra.get("org_display"))
+    _fill("industry_orgs", extra.get("industry_orgs"))
+    _fill("affiliation_type", extra.get("affiliation_type"), allow_overwrite_unknown=True)
+    _fill("is_industrial_paper", extra.get("is_industrial_paper"))
+    _fill("is_ab_test", extra.get("is_ab_test"))
+    # summary 字段在前端语义是「中文 tldr / 用户笔记」，深度分析的 summary_zh 应写入这里，
+    # 但若用户已手填，则不覆盖。
+    _fill("summary", extra.get("summary_zh"))
+
+    rows.append(new_row)
     with open(path, "w") as f:
         for r in rows:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
@@ -158,10 +200,21 @@ def _normalize_deep_result(raw: dict) -> dict:
         "method_details", "experiments", "results_analysis", "conclusion",
         "related_comparison",
     ]
+    meta_text_fields = ["summary_zh", "authors", "org_display", "industry_orgs", "affiliation_type"]
+    bool_fields = ["is_industrial_paper", "is_ab_test"]
 
     data = dict(raw or {})
     for field in text_fields:
         data[field] = str(data.get(field) or "")
+    for field in meta_text_fields:
+        data[field] = str(data.get(field) or "")
+    if data.get("affiliation_type") not in {"industry", "academia", "collaboration", "unknown"}:
+        data["affiliation_type"] = "unknown"
+    for field in bool_fields:
+        data[field] = bool(data.get(field))
+    # 一致性：industry / collaboration 一定算工业界参与
+    if data.get("affiliation_type") in {"industry", "collaboration"}:
+        data["is_industrial_paper"] = True
     for field in list_fields:
         value = data.get(field)
         data[field] = value if isinstance(value, list) else []
@@ -243,8 +296,30 @@ def main():
         json.dump(deep_obj, f, ensure_ascii=False, indent=2)
     print(f"Wrote {out_path}", file=sys.stderr)
 
+    # 回填 favorites.jsonl：补齐机构、产学类型、中文 tldr、A/B 实验等字段，
+    # 但绝不覆盖用户已经手动维护过的 tags / summary 等。
+    update_favorites_index(
+        data_dir=data_dir,
+        paper_id=paper_id,
+        title=args.title or paper_id,
+        date=args.date,
+        tags=result.get("tags", []),
+        extra={
+            "authors": result.get("authors", ""),
+            "org_display": result.get("org_display", ""),
+            "industry_orgs": result.get("industry_orgs", ""),
+            "affiliation_type": result.get("affiliation_type", ""),
+            "is_industrial_paper": result.get("is_industrial_paper", False),
+            "is_ab_test": result.get("is_ab_test", False),
+            "summary_zh": result.get("summary_zh", ""),
+        },
+    )
+
+    # 同时把 LLM 提议的新标签汇总到 tags_pending.json，让用户在前端确认后再合并。
+    append_pending_tags(data_dir, result.get("new_tags", []), paper_id)
+
     # 标签现在由用户在收藏夹页面手动维护并写入 tags.json / favorites.jsonl。
-    # 深度分析只产出 data/deep/{id}.json，避免 LLM 自动标签覆盖用户手动标签。
+    # 深度分析只产出 data/deep/{id}.json 与机构等元数据回填，不自动改写用户手动标签。
 
 
 if __name__ == "__main__":
