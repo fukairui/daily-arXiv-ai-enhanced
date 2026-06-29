@@ -885,7 +885,7 @@ async function handleManualAddArxiv() {
     // 写入本地
     Favorites.add(id, metaToAdd);
 
-    // 同步到远端（若已配置 PAT）
+    // 同步到远端（若已配置 PAT），并自动触发深度分析。
     if (GitHubClient.hasToken()) {
         const syncRes = await GitHubClient.updateFileWithRetry('data/favorites.jsonl', (old) => {
             const rows = Favorites.parseRemoteRows(old);
@@ -897,10 +897,36 @@ async function handleManualAddArxiv() {
         if (!syncRes.ok) {
             setManualAddStatus(`已添加到本地，但远端同步失败：${syncRes.message || '未知错误'}`, 'error');
         } else {
-            setManualAddStatus(`已添加：${metaToAdd.title || id}${metaToAdd.meta_fetch_failed ? '（元数据抓取失败，仅最小信息）' : ''}`, metaToAdd.meta_fetch_failed ? 'info' : 'success');
+            setManualAddStatus(
+                `已添加：${metaToAdd.title || id}${metaToAdd.meta_fetch_failed ? '（元数据抓取失败，仅最小信息）' : ''}，正在自动触发深度分析...`,
+                'info'
+            );
+        }
+
+        // 自动触发深度分析，让 deepseek-reasoner 从 PDF 中提取机构、中文 tldr、产学属性等。
+        // 这一步和「深度分析」按钮的逻辑一致，因此跑完后机构、属性、简要摘要会自动回填。
+        try {
+            const dispRes = await GitHubClient.dispatch(DISPATCH_EVENT, {
+                id,
+                pdf: metaToAdd.pdf || `https://arxiv.org/pdf/${id}`,
+                title: metaToAdd.title || id,
+                date: metaToAdd.date || '',
+                affiliations: metaToAdd.org_display || '',
+                known_tags: knownTags.map(t => t.name).filter(Boolean),
+                language: 'Chinese'
+            });
+            if (!dispRes.ok) {
+                setManualAddStatus(`已添加，但触发深度分析失败 (${dispRes.status})：${dispRes.message || '未知错误'}。可稍后在卡片上点「深度分析」重试。`, 'error');
+            } else {
+                setManualAddStatus(`已添加并触发深度分析：${metaToAdd.title || id}。后端跑完后机构/中文摘要/属性会自动出现，可稍后刷新。`, 'success');
+                // 后台轮询深度分析结果；拿到后会刷新页面。
+                pollForResult(id, null);
+            }
+        } catch (e) {
+            setManualAddStatus(`已添加，但触发深度分析失败：${e.message || e}`, 'error');
         }
     } else {
-        setManualAddStatus(`已添加到本地（未配置 PAT，无法跨浏览器同步）：${metaToAdd.title || id}`, 'info');
+        setManualAddStatus(`已添加到本地（未配置 PAT，无法触发深度分析或跨浏览器同步）：${metaToAdd.title || id}`, 'info');
     }
 
     input.value = '';
