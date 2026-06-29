@@ -30,7 +30,7 @@ Full text of the paper (may be truncated):
 
 OUTPUT FORMAT (very important):
 Return ONLY a valid JSON object, no markdown code fences, no prose before/after.
-**JSON string escaping**: the entire response is parsed as JSON. Every backslash inside a string value MUST be doubled. Write `\\theta` not `\theta`, `\\sum` not `\sum`, `\\mathcal{L}` not `\mathcal{L}`, `$$\\sum_{i=1}^m \\log p(x_i)$$` not `$$\sum_{i=1}^m \log p(x_i)$$`. A LaTeX backslash command without doubling will break JSON parsing or silently corrupt the formula.
+**JSON string escaping**: the entire response is parsed as JSON. Every backslash inside a string value MUST be doubled. Write `\\theta` not `\theta`, `\\sum` not `\sum`, `\\mathcal` not `\mathcal`, and LaTeX commands like `\\sum_(i=1)^m` (display form) must keep the backslash doubled. A LaTeX backslash command without doubling will break JSON parsing or silently corrupt the formula.
 The JSON object MUST have these keys:
 {{
   "markdown": "<整篇中文论文精读 Markdown>",
