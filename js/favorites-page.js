@@ -719,10 +719,13 @@ async function fetchArxivMeta(id) {
                 lastErr = `HTTP ${resp.status} @ ${url}`;
                 continue;
             }
-            text = await resp.text();
-            if (text && text.includes('<entry')) break;
-            lastErr = `空响应 @ ${url}`;
-            text = '';
+            const body = await resp.text();
+            // 必须看起来像 Atom XML，避免命中 jina/markdown 类代理返回的渲染文本。
+            if (body && body.includes('<entry') && body.includes('</entry>')) {
+                text = body;
+                break;
+            }
+            lastErr = `非预期响应 @ ${url}`;
         } catch (e) {
             lastErr = `${e.message || 'network error'} @ ${url}`;
         }
@@ -746,12 +749,18 @@ async function fetchArxivMeta(id) {
 
     const get = (sel) => (entry.querySelector(sel)?.textContent || '').trim();
     const title = get('title').replace(/\s+/g, ' ');
-    const summary = get('summary').replace(/\s+/g, ' ');
+    const abstract = get('summary').replace(/\s+/g, ' ');
     const published = get('published').slice(0, 10);
     const authors = Array.from(entry.querySelectorAll('author > name'))
         .map(n => n.textContent.trim()).filter(Boolean).join(', ');
     const categories = Array.from(entry.querySelectorAll('category'))
         .map(c => c.getAttribute('term')).filter(Boolean);
+    // arXiv API 多数条目不带 affiliation，少数会带 <arxiv:affiliation>。尝试拿一下。
+    const affiliations = Array.from(entry.getElementsByTagName('*'))
+        .filter(el => (el.localName || el.nodeName).toLowerCase() === 'affiliation')
+        .map(el => (el.textContent || '').trim())
+        .filter(Boolean);
+    const orgDisplay = Array.from(new Set(affiliations)).join(', ');
 
     return {
         ok: true,
@@ -762,12 +771,13 @@ async function fetchArxivMeta(id) {
             pdf: `https://arxiv.org/pdf/${id}`,
             authors,
             categories,
-            details: summary,
-            summary: '',
+            // details 保留为完整摘要；summary 同步填一份，UI 的「简要摘要」块就能直接显示。
+            details: abstract,
+            summary: abstract,
             is_ab_test: false,
             is_industrial_paper: false,
-            affiliation_type: 'unknown',
-            org_display: '',
+            affiliation_type: orgDisplay ? 'unknown' : 'unknown',
+            org_display: orgDisplay,
             industry_orgs: '',
             code_url: '',
             code_stars: 0,
