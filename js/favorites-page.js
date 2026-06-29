@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
     bindModal();
+    bindManualAdd();
     await restoreFromRemote();
     if (GitHubClient.hasToken()) {
         const res = await Favorites.syncAllToRemote();
@@ -659,6 +660,164 @@ function bindModal() {
     document.getElementById('closeDeepModal').onclick = close;
     modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+}
+
+/* ---------------- 手动添加 arXiv 论文 ---------------- */
+
+/**
+ * 解析输入框中的 arXiv 链接或 ID。
+ * 支持：
+ *   - https://arxiv.org/abs/2401.12345
+ *   - https://arxiv.org/abs/2401.12345v2
+ *   - https://arxiv.org/pdf/2401.12345.pdf
+ *   - arxiv.org/abs/cs.IR/0701001  （老式 ID）
+ *   - 裸 ID：2401.12345 / 2401.12345v2 / cs.IR/0701001
+ */
+function parseArxivId(raw) {
+    if (!raw) return null;
+    let s = String(raw).trim();
+    s = s.replace(/^https?:\/\//i, '');
+    s = s.replace(/^(www\.)?arxiv\.org\//i, '');
+    s = s.replace(/^(abs|pdf|html|ftp)\//i, '');
+    s = s.replace(/\.pdf$/i, '');
+    s = s.replace(/[?#].*$/, '');
+    // 新格式：YYMM.NNNNN(vN)，去掉版本号
+    const mNew = s.match(/^(\d{4}\.\d{4,5})(v\d+)?$/);
+    if (mNew) return mNew[1];
+    // 老格式：archive.subj/YYMMNNN(vN)
+    const mOld = s.match(/^([a-z\-]+(?:\.[A-Z]{2})?\/\d{7})(v\d+)?$/);
+    if (mOld) return mOld[1];
+    // 兜底：从字符串里直接匹配
+    const fallback = s.match(/(\d{4}\.\d{4,5})|([a-z\-]+(?:\.[A-Z]{2})?\/\d{7})/);
+    return fallback ? (fallback[1] || fallback[2]) : null;
+}
+
+/** 通过 arXiv API 拉论文元数据。返回与本地 meta 兼容的对象。 */
+async function fetchArxivMeta(id) {
+    const url = `https://export.arxiv.org/api/query?id_list=${encodeURIComponent(id)}`;
+    const resp = await fetch(url, { headers: { 'Accept': 'application/atom+xml' } });
+    if (!resp.ok) {
+        return { ok: false, message: `arXiv API HTTP ${resp.status}` };
+    }
+    const text = await resp.text();
+    const xml = new DOMParser().parseFromString(text, 'application/xml');
+    if (xml.querySelector('parsererror')) {
+        return { ok: false, message: 'arXiv API 响应解析失败' };
+    }
+    const entry = xml.querySelector('feed > entry');
+    if (!entry) return { ok: false, message: `arXiv 未找到该论文 (id=${id})` };
+
+    const get = (sel) => (entry.querySelector(sel)?.textContent || '').trim();
+    const title = get('title').replace(/\s+/g, ' ');
+    const summary = get('summary').replace(/\s+/g, ' ');
+    const published = get('published').slice(0, 10);
+    const authors = Array.from(entry.querySelectorAll('author > name'))
+        .map(n => n.textContent.trim()).filter(Boolean).join(', ');
+    const categories = Array.from(entry.querySelectorAll('category'))
+        .map(c => c.getAttribute('term')).filter(Boolean);
+
+    return {
+        ok: true,
+        meta: {
+            title: title || id,
+            date: published || '',
+            abs: `https://arxiv.org/abs/${id}`,
+            pdf: `https://arxiv.org/pdf/${id}`,
+            authors,
+            categories,
+            details: summary,
+            summary: '',
+            is_ab_test: false,
+            is_industrial_paper: false,
+            affiliation_type: 'unknown',
+            org_display: '',
+            industry_orgs: '',
+            code_url: '',
+            code_stars: 0,
+            manual_added: true,
+            added_at: new Date().toISOString()
+        }
+    };
+}
+
+function setManualAddStatus(text, kind) {
+    const el = document.getElementById('arxivAddStatus');
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.remove('success', 'error', 'info');
+    if (kind) el.classList.add(kind);
+}
+
+async function handleManualAddArxiv() {
+    const input = document.getElementById('arxivInput');
+    const btn = document.getElementById('addArxivBtn');
+    if (!input || !btn) return;
+
+    const id = parseArxivId(input.value);
+    if (!id) {
+        setManualAddStatus('无法识别 arXiv 链接或 ID', 'error');
+        return;
+    }
+    if (Favorites.has(id)) {
+        setManualAddStatus(`已在收藏中：${id}`, 'info');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = '抓取中...';
+    setManualAddStatus(`正在从 arXiv 抓取 ${id} ...`, 'info');
+
+    let result;
+    try {
+        result = await fetchArxivMeta(id);
+    } catch (e) {
+        result = { ok: false, message: e.message || '网络错误' };
+    }
+
+    if (!result.ok) {
+        btn.disabled = false;
+        btn.textContent = '添加';
+        setManualAddStatus(`抓取失败：${result.message}`, 'error');
+        return;
+    }
+
+    // 写入本地
+    Favorites.add(id, result.meta);
+
+    // 同步到远端（若已配置 PAT）
+    if (GitHubClient.hasToken()) {
+        const syncRes = await GitHubClient.updateFileWithRetry('data/favorites.jsonl', (old) => {
+            const rows = Favorites.parseRemoteRows(old);
+            const existing = rows.find(r => r.id === id) || {};
+            const filtered = rows.filter(r => r.id !== id);
+            filtered.push(Favorites.metaToRemoteRow(id, result.meta, existing));
+            return filtered.map(r => JSON.stringify(r)).join('\n') + '\n';
+        }, `favorites: manually add ${id}`);
+        if (!syncRes.ok) {
+            setManualAddStatus(`已添加到本地，但远端同步失败：${syncRes.message || '未知错误'}`, 'error');
+        } else {
+            setManualAddStatus(`已添加：${result.meta.title || id}`, 'success');
+        }
+    } else {
+        setManualAddStatus(`已添加到本地（未配置 PAT，无法跨浏览器同步）：${result.meta.title || id}`, 'info');
+    }
+
+    input.value = '';
+    btn.disabled = false;
+    btn.textContent = '添加';
+    render();
+}
+
+function bindManualAdd() {
+    const btn = document.getElementById('addArxivBtn');
+    const input = document.getElementById('arxivInput');
+    if (btn) btn.addEventListener('click', handleManualAddArxiv);
+    if (input) input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleManualAddArxiv();
+        }
+    });
 }
 
 /* ---------------- 待确认标签 ---------------- */

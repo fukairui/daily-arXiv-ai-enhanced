@@ -70,6 +70,17 @@
                     <p id="favStats" class="favorites-stats">加载中...</p>
                 </div>
 
+                <!-- 手动添加 arXiv 论文 -->
+                <div class="favorites-add-arxiv">
+                    <h3>手动添加 arXiv 论文</h3>
+                    <p class="add-arxiv-hint">支持粘贴链接或 ID（任意 arXiv 分类，不限于 cs.IR）：<code>https://arxiv.org/abs/2401.12345</code>、<code>2401.12345</code> 等</p>
+                    <div class="add-arxiv-row">
+                        <input id="arxivInput" class="add-arxiv-input" type="text" placeholder="https://arxiv.org/abs/2401.12345 或 2401.12345" autocomplete="off" />
+                        <button id="addArxivBtn" class="button primary">添加</button>
+                        <span id="arxivAddStatus" class="add-arxiv-status"></span>
+                    </div>
+                </div>
+
                 <!-- 待确认的新标签提示区 -->
                 <div id="pendingTagsBox" class="pending-tags-box" style="display:none;">
                     <h3>待确认的研究方向标签</h3>
