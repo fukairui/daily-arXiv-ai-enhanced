@@ -243,6 +243,51 @@ header {
   text-decoration: none !important;
 }
 
+/* LLM4Rec 品牌 logo（替代左上角 GitHub 按钮） */
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none !important;
+  padding: 2px 4px;
+  border-radius: 10px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.brand-logo:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.18);
+}
+.brand-logo-svg {
+  flex: 0 0 auto;
+  filter: drop-shadow(0 2px 4px rgba(79, 70, 229, 0.25));
+}
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+.brand-name {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  background: linear-gradient(120deg, #7c3aed 0%, #4f46e5 55%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-family: "Inter", "JetBrains Mono", system-ui, -apple-system, sans-serif;
+}
+.brand-sub {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--text-secondary, #64748b);
+  letter-spacing: 0.5px;
+  text-transform: lowercase;
+  margin-top: 1px;
+}
+@media (max-width: 720px) {
+  .brand-text { display: none; }
+}
+
 .github-button:hover {
   background: var(--text-color);
   text-decoration: none !important;
