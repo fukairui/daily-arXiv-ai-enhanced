@@ -194,18 +194,11 @@ def _extract_json_object(text: str) -> dict:
 
 def _normalize_deep_result(raw: dict) -> dict:
     """校验并规范化 deep analysis 结果，确保前端字段齐全。"""
-    list_fields = ["innovations", "limitations", "future_work", "tags", "new_tags"]
-    text_fields = [
-        "background", "problem", "motivation", "method_overview",
-        "method_details", "experiments", "results_analysis", "conclusion",
-        "related_comparison",
-    ]
-    meta_text_fields = ["summary_zh", "authors", "org_display", "industry_orgs", "affiliation_type"]
+    list_fields = ["tags", "new_tags"]
+    meta_text_fields = ["markdown", "summary_zh", "authors", "org_display", "industry_orgs", "affiliation_type"]
     bool_fields = ["is_industrial_paper", "is_ab_test"]
 
     data = dict(raw or {})
-    for field in text_fields:
-        data[field] = str(data.get(field) or "")
     for field in meta_text_fields:
         data[field] = str(data.get(field) or "")
     if data.get("affiliation_type") not in {"industry", "academia", "collaboration", "unknown"}:
@@ -279,14 +272,16 @@ def main():
         "analyzed_at": datetime.now(timezone.utc).isoformat(),
         "tags": result.get("tags", []),
         "new_tags": result.get("new_tags", []),
-        "deep": {
-            k: result[k] for k in (
-                "background", "problem", "motivation", "method_overview",
-                "method_details", "experiments", "results_analysis",
-                "conclusion", "innovations", "limitations", "future_work",
-                "related_comparison",
-            )
-        },
+        # 新版：整篇精读用一份连贯 Markdown 表达，前端编辑器直接渲染。
+        "markdown": result.get("markdown", ""),
+        # 元数据快照
+        "summary_zh": result.get("summary_zh", ""),
+        "authors": result.get("authors", ""),
+        "org_display": result.get("org_display", ""),
+        "industry_orgs": result.get("industry_orgs", ""),
+        "affiliation_type": result.get("affiliation_type", "unknown"),
+        "is_industrial_paper": result.get("is_industrial_paper", False),
+        "is_ab_test": result.get("is_ab_test", False),
     }
 
     data_dir = args.data_dir

@@ -1,4 +1,4 @@
-Please produce an in-depth analysis of the following paper.
+Please produce an in-depth analysis of the following paper, in CHINESE.
 
 Title:
 {title}
@@ -14,41 +14,38 @@ Full text of the paper (may be truncated):
 {full_text}
 ---
 
-Requirements:
-1. Fill every analysis field thoroughly and technically, based on the FULL TEXT (not just the abstract). Each prose field should be a detailed paragraph; list fields (innovations/limitations/future_work) should contain concrete bullet points.
-2. tags: choose the 1-3 MOST relevant tags from the known tag library above. The tag names you output here MUST exactly match existing tag names. If none of the known tags fit, leave tags empty.
-3. new_tags: ONLY if this paper clearly belongs to a brand-new research direction that none of the known tags can cover, propose new tag(s) here with a one-sentence description. Otherwise return an empty list. Never duplicate an existing tag in new_tags. Prefer reusing existing tags over creating new ones.
-4. summary_zh: write a 1~2 sentence Chinese TL;DR that captures the core contribution. Plain text, no markdown.
-5. authors: comma-separated authors extracted from the paper header (English names as they appear). Leave empty only if truly unidentifiable.
-6. org_display: comma-separated unique affiliations of the authors, exactly as printed in the paper (e.g. "Google DeepMind, MIT"). Do not invent affiliations.
-7. industry_orgs: subset of org_display containing only companies/industry labs (e.g. "Google DeepMind, ByteDance, Meta"). Universities/research institutes do NOT count. Leave empty if none.
-8. affiliation_type: must be one of "industry" / "academia" / "collaboration" / "unknown". Use "industry" only if every affiliation is a company; "academia" only if every affiliation is a university/research institute; "collaboration" if there is at least one of each; "unknown" if affiliations cannot be determined.
-9. is_industrial_paper: true iff affiliation_type is "industry" or "collaboration".
-10. is_ab_test: true iff the paper contains an online A/B test or live deployment evaluation.
-
-Output format:
-Return ONLY a valid JSON object. Do NOT wrap it in markdown fences. Do NOT add explanations before or after the JSON.
-The JSON object MUST have exactly these keys and compatible value types:
+OUTPUT FORMAT (very important):
+Return ONLY a valid JSON object, no markdown code fences, no prose before/after.
+The JSON object MUST have these keys:
 {{
-  "summary_zh": "string",
-  "authors": "string",
-  "org_display": "string",
-  "industry_orgs": "string",
+  "markdown": "<整篇中文论文精读 Markdown>",
+  "summary_zh": "<1~2 句中文 TL;DR>",
+  "authors": "<comma-separated authors>",
+  "org_display": "<comma-separated unique affiliations>",
+  "industry_orgs": "<comma-separated industry affiliations subset of org_display>",
   "affiliation_type": "industry|academia|collaboration|unknown",
   "is_industrial_paper": true,
   "is_ab_test": false,
-  "background": "string",
-  "problem": "string",
-  "motivation": "string",
-  "method_overview": "string",
-  "method_details": "string",
-  "experiments": "string",
-  "results_analysis": "string",
-  "conclusion": "string",
-  "innovations": ["string"],
-  "limitations": ["string"],
-  "future_work": ["string"],
-  "related_comparison": "string",
   "tags": ["Existing Tag Name"],
   "new_tags": [{{"name": "New Tag Name", "desc": "one sentence description"}}]
 }}
+
+REQUIREMENTS FOR `markdown`:
+- 用一篇连贯的中文阅读笔记呈现，**不要使用顶级 H1 标题**（H1 由前端补），从 `## 1. 核心问题` 这种 H2 开始。
+- 必含章节：核心问题、相关工作、方法概览、方法细节（按子模块拆解）、训练与部署优化（如有）、实验设置、实验结果（关键数字以 GFM 表格呈现）、创新点与亮点、局限性与未来工作、与相关工作的对比、评价与启示。
+- 行文风格类似资深研究员写的论文精读笔记，技术细节扎实，不要泛泛而谈。
+- 公式使用 KaTeX 语法：行内公式 `$...$`，独立公式 `$$...$$`。不要使用 \\(\\) 或 \\[\\]。
+- 表格使用 GFM 语法（带表头分隔线）。
+- 引用 / 参考链接用普通 Markdown `[text](url)`，**不要插入图片**（前端不会下载论文图）。
+- 禁止使用 YAML front-matter、HTML 注释、`<details>` 块。
+
+REQUIREMENTS FOR METADATA FIELDS:
+- summary_zh: 1~2 句中文 TL;DR，纯文本无 markdown。
+- authors: 逗号分隔的英文原作者名。
+- org_display: 逗号分隔的去重机构名（与论文中印刷文本一致）。
+- industry_orgs: org_display 的子集，仅保留公司/工业实验室。
+- affiliation_type: 取 industry / academia / collaboration / unknown 之一。
+- is_industrial_paper: 当 affiliation_type 是 industry 或 collaboration 时为 true。
+- is_ab_test: 论文是否含在线 A/B 实验。
+- tags: 从已知标签库中挑选 1-3 个最贴切；必须与已知标签名精确一致；不贴切则空。
+- new_tags: 仅当该论文是全新研究方向且已知标签均无法覆盖时再提议；否则空数组。

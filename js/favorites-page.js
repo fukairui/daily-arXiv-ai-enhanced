@@ -651,47 +651,178 @@ function pollForEnhancement(id) {
     }, POLL_INTERVAL_MS);
 }
 
-/* ---------------- 深度分析弹窗 ---------------- */
+/* ---------------- 深度分析弹窗（Markdown 编辑 + 实时渲染） ---------------- */
 
-function section(title, content) {
-    if (!content) return '';
-    const body = Array.isArray(content)
-        ? '<ul>' + content.map(x => `<li>${escapeHtml(x)}</li>`).join('') + '</ul>'
-        : `<p>${escapeHtml(content)}</p>`;
-    return `<div class="paper-section"><h4>${title}</h4>${body}</div>`;
+let currentDeepId = null;
+let currentDeepObj = null;
+let deepRenderTimer = null;
+
+function legacyDeepToMarkdown(deep) {
+    if (!deep) return '';
+    const lines = [];
+    const mapping = [
+        ['1. 领域背景', deep.background],
+        ['2. 核心问题', deep.problem],
+        ['3. 研究动机', deep.motivation],
+        ['4. 方法概览', deep.method_overview],
+        ['5. 方法细节', deep.method_details],
+        ['6. 实验设置', deep.experiments],
+        ['7. 结果与分析', deep.results_analysis],
+        ['8. 结论', deep.conclusion],
+    ];
+    mapping.forEach(([h, body]) => {
+        if (body && String(body).trim()) {
+            lines.push(`## ${h}`);
+            lines.push(String(body).trim());
+            lines.push('');
+        }
+    });
+    const listBlock = (title, arr) => {
+        if (Array.isArray(arr) && arr.length) {
+            lines.push(`## ${title}`);
+            arr.forEach(item => lines.push(`- ${item}`));
+            lines.push('');
+        }
+    };
+    listBlock('9. 创新点', deep.innovations);
+    listBlock('10. 局限性', deep.limitations);
+    listBlock('11. 未来方向', deep.future_work);
+    if (deep.related_comparison && String(deep.related_comparison).trim()) {
+        lines.push('## 12. 与相关工作的对比');
+        lines.push(String(deep.related_comparison).trim());
+    }
+    return lines.join('\n');
+}
+
+function getDeepMarkdown(obj) {
+    if (!obj) return '';
+    if (typeof obj.markdown === 'string' && obj.markdown.trim()) return obj.markdown;
+    return legacyDeepToMarkdown(obj.deep || {});
+}
+
+function renderMarkdownInto(el, mdText) {
+    if (!el) return;
+    let html;
+    try {
+        // 安全配置 marked：GFM + 换行 + 不抛出
+        if (typeof marked !== 'undefined') {
+            marked.setOptions({ gfm: true, breaks: false, mangle: false, headerIds: true });
+            html = marked.parse(mdText || '');
+        } else {
+            html = `<pre>${escapeHtml(mdText || '')}</pre>`;
+        }
+    } catch (e) {
+        html = `<pre>${escapeHtml(mdText || '')}</pre>`;
+    }
+    if (typeof DOMPurify !== 'undefined') {
+        el.innerHTML = DOMPurify.sanitize(html, { ADD_ATTR: ['target'] });
+    } else {
+        el.innerHTML = html;
+    }
+    // 数学公式渲染
+    if (typeof renderMathInElement === 'function') {
+        try {
+            renderMathInElement(el, {
+                delimiters: [
+                    { left: '$$', right: '$$', display: true },
+                    { left: '$', right: '$', display: false },
+                    { left: '\\(', right: '\\)', display: false },
+                    { left: '\\[', right: '\\]', display: true }
+                ],
+                throwOnError: false
+            });
+        } catch (e) { /* ignore */ }
+    }
+    // 代码块高亮
+    if (typeof hljs !== 'undefined') {
+        el.querySelectorAll('pre code').forEach(block => {
+            try { hljs.highlightElement(block); } catch (e) { /* ignore */ }
+        });
+    }
+    // 链接默认新标签打开
+    el.querySelectorAll('a[href^="http"]').forEach(a => a.setAttribute('target', '_blank'));
 }
 
 function showDeepModal(id) {
     const deep = deepCache[id];
     if (!deep) return;
-    const d = deep.deep || {};
-    document.getElementById('deepModalTitle').textContent = deep.title || id;
+    currentDeepId = id;
+    currentDeepObj = deep;
 
-    const tagsHtml = renderTagBadges(getPaperTags(id), id, false);
-    const body = `
-        <div class="paper-details">
-            <p class="deep-meta">模型: ${escapeHtml(deep.model || '')} · 分析时间: ${escapeHtml((deep.analyzed_at || '').slice(0, 10))}</p>
-            <div class="fav-card-tags">${tagsHtml}</div>
-            <div class="paper-sections">
-                ${section('领域背景', d.background)}
-                ${section('核心问题', d.problem)}
-                ${section('研究动机', d.motivation)}
-                ${section('方法总览', d.method_overview)}
-                ${section('方法细节', d.method_details)}
-                ${section('实验设置', d.experiments)}
-                ${section('结果与分析', d.results_analysis)}
-                ${section('结论', d.conclusion)}
-                ${section('创新点', d.innovations)}
-                ${section('局限性', d.limitations)}
-                ${section('未来方向', d.future_work)}
-                ${section('与相关工作对比', d.related_comparison)}
-            </div>
-        </div>
-    `;
-    document.getElementById('deepModalBody').innerHTML = body;
+    document.getElementById('deepModalTitle').textContent = deep.title || id;
+    const meta = [
+        deep.model ? `模型: ${deep.model}` : '',
+        deep.analyzed_at ? `分析时间: ${String(deep.analyzed_at).slice(0, 10)}` : ''
+    ].filter(Boolean).join(' · ');
+    document.getElementById('deepMetaLine').textContent = meta;
+
+    const md = getDeepMarkdown(deep);
+    const textarea = document.getElementById('deepMarkdownInput');
+    textarea.value = md;
+    renderMarkdownInto(document.getElementById('deepPreview'), md);
+
+    // 默认进入只读预览模式
+    setDeepEditMode(false);
+    setDeepSaveStatus('');
+
     const modal = document.getElementById('deepModal');
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
+}
+
+function setDeepEditMode(editing) {
+    const pane = document.getElementById('deepEditPane');
+    const toggle = document.getElementById('deepEditToggle');
+    const saveBtn = document.getElementById('deepSaveBtn');
+    pane.style.display = editing ? '' : 'none';
+    toggle.textContent = editing ? '完成编辑' : '编辑';
+    saveBtn.style.display = editing ? '' : 'none';
+}
+
+function setDeepSaveStatus(text, kind) {
+    const el = document.getElementById('deepSaveStatus');
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = 'deep-save-status' + (kind ? ` ${kind}` : '');
+}
+
+async function saveDeepMarkdownToRemote() {
+    if (!currentDeepId) return;
+    if (!GitHubClient.hasToken()) {
+        alert('请先在「设置」页配置 GitHub PAT，才能保存到远端。');
+        return;
+    }
+    const textarea = document.getElementById('deepMarkdownInput');
+    const newMd = textarea.value || '';
+    const saveBtn = document.getElementById('deepSaveBtn');
+    saveBtn.disabled = true;
+    setDeepSaveStatus('保存中...', 'info');
+
+    const path = `data/deep/${currentDeepId}.json`;
+    const res = await GitHubClient.updateFileWithRetry(path, (old) => {
+        let payload = {};
+        if (old) {
+            try { payload = JSON.parse(old); } catch (e) { payload = {}; }
+        }
+        if (!payload || typeof payload !== 'object') payload = {};
+        payload.id = currentDeepId;
+        payload.title = currentDeepObj.title || currentDeepId;
+        payload.markdown = newMd;
+        // 旧的分块字段如存在则保留为只读历史，不再使用。
+        payload.edited_at = new Date().toISOString();
+        return JSON.stringify(payload, null, 2);
+    }, `deep: edit markdown for ${currentDeepId}`);
+
+    saveBtn.disabled = false;
+    if (res.ok) {
+        // 本地缓存同步
+        deepCache[currentDeepId] = { ...(deepCache[currentDeepId] || {}), markdown: newMd, edited_at: new Date().toISOString() };
+        currentDeepObj = deepCache[currentDeepId];
+        setDeepSaveStatus('已保存', 'success');
+        setTimeout(() => setDeepSaveStatus(''), 2500);
+    } else {
+        setDeepSaveStatus(`保存失败：${res.message || '未知错误'}`, 'error');
+    }
 }
 
 function bindModal() {
@@ -700,6 +831,27 @@ function bindModal() {
     document.getElementById('closeDeepModal').onclick = close;
     modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+
+    const editToggle = document.getElementById('deepEditToggle');
+    if (editToggle) {
+        editToggle.addEventListener('click', () => {
+            const pane = document.getElementById('deepEditPane');
+            setDeepEditMode(pane.style.display === 'none');
+        });
+    }
+    const saveBtn = document.getElementById('deepSaveBtn');
+    if (saveBtn) saveBtn.addEventListener('click', saveDeepMarkdownToRemote);
+
+    const textarea = document.getElementById('deepMarkdownInput');
+    if (textarea) {
+        textarea.addEventListener('input', () => {
+            // 实时渲染（节流避免大文本卡顿）
+            clearTimeout(deepRenderTimer);
+            deepRenderTimer = setTimeout(() => {
+                renderMarkdownInto(document.getElementById('deepPreview'), textarea.value);
+            }, 120);
+        });
+    }
 }
 
 /* ---------------- 手动添加 arXiv 论文 ---------------- */

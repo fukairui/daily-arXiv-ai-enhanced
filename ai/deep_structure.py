@@ -8,8 +8,23 @@ class NewTag(BaseModel):
 
 
 class DeepStructure(BaseModel):
-    """Rich, paper-reading-level deep analysis of a single paper based on its full text."""
+    """A long-form, paper-reading-level deep analysis in Markdown form, plus minimal metadata."""
 
+    # ===== 主输出：连贯的中文 Markdown 论文精读 =====
+    markdown: str = Field(
+        default="",
+        description=(
+            "整篇论文精读以**单一中文 Markdown** 给出，要求结构清晰、逻辑连贯、技术细节扎实，"
+            "可读性接近资深研究员的『论文阅读笔记』。建议章节包括：\n"
+            "1. 核心问题\n2. 相关工作（按主题分组并简述代表方法）\n3. 方法概览\n4. 方法细节"
+            "（按子模块拆解，可写公式与训练/推理流程；数学公式用 $...$ / $$...$$ 包裹，KaTeX 语法）\n"
+            "5. 训练与部署优化\n6. 实验设置（数据/指标/对比模型/超参）\n7. 实验结果（关键表格用 GFM 表格语法）\n"
+            "8. 创新点与亮点\n9. 局限性与未来工作\n10. 与相关工作的对比\n11. 评价与启示\n"
+            "禁止输出 YAML front-matter、HTML 注释、代码围栏中嵌入 markdown。"
+        ),
+    )
+
+    # ===== 元数据，前端列表/筛选用 =====
     summary_zh: str = Field(default="", description="一段中文 tldr 总结（1~2 句话），用于在收藏列表卡片上的『简要摘要』直接展示。")
     authors: str = Field(default="", description="作者列表（英文原文，多个作者用英文逗号分隔），从 PDF 首页提取。无法识别则留空。")
     org_display: str = Field(default="", description="本论文所有去重后的作者机构名称（英文原文，多个机构用英文逗号分隔）。无法识别则留空。")
@@ -18,17 +33,6 @@ class DeepStructure(BaseModel):
     is_industrial_paper: bool = Field(default=False, description="是否为工业界参与的论文。affiliation_type 为 industry 或 collaboration 时为 true。")
     is_ab_test: bool = Field(default=False, description="是否包含线上 A/B 实验。")
 
-    background: str = Field(description="领域背景与研究现状：该工作所处的研究领域、已有方法的局限，为读者建立上下文。要详尽，像论文 Related Work 的精炼。")
-    problem: str = Field(description="本文要解决的核心问题，清晰准确地陈述。")
-    motivation: str = Field(description="研究动机：为什么这个问题重要、为什么现有方法不足、作者的核心洞察。")
-    method_overview: str = Field(description="方法总览：用几句话讲清整体框架与核心思想。")
-    method_details: str = Field(description="方法细节：逐模块拆解关键设计、关键公式的文字解释、训练/推理流程。尽量详尽，体现论文精读深度。")
-    experiments: str = Field(description="实验设置：数据集、基线、评测指标、消融设计、是否含线上 A/B 实验。")
-    results_analysis: str = Field(description="实验结果与分析：关键数字、相对基线的提升、消融结论、作者得出的洞察。")
-    conclusion: str = Field(description="结论：本文的最终结论与贡献总结。")
-    innovations: List[str] = Field(description="创新点列表，每条一句话，突出与已有工作的区别。")
-    limitations: List[str] = Field(description="局限性列表，每条一句话，指出方法/实验的不足。")
-    future_work: List[str] = Field(description="未来方向列表，每条一句话。")
-    related_comparison: str = Field(description="与相关工作的对比：与最接近的若干已有方法在思路/性能上的异同。")
-    tags: List[str] = Field(description="从『已知标签库』中选出最贴切的 1-3 个研究方向标签（必须与已知标签名完全一致）。若没有任何已知标签贴切，可为空。")
-    new_tags: List[NewTag] = Field(description="仅当该论文确实属于一个全新研究方向、且已知标签库都无法覆盖时，才在此提议新标签；否则返回空列表。不要重复已知标签。")
+    # ===== 标签 =====
+    tags: List[str] = Field(default_factory=list, description="从『已知标签库』中选出最贴切的 1-3 个研究方向标签（必须与已知标签名完全一致）。若没有任何已知标签贴切，可为空。")
+    new_tags: List[NewTag] = Field(default_factory=list, description="仅当该论文确实属于一个全新研究方向、且已知标签库都无法覆盖时，才在此提议新标签；否则返回空列表。不要重复已知标签。")

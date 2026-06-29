@@ -11,6 +11,15 @@
     <link rel="stylesheet" href="css/favorites.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
 
+    <!-- Markdown 渲染 (marked) + 数学公式 (KaTeX) + 代码高亮 (highlight.js) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/styles/github.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+
     <!-- Authentication Scripts -->
     <script src="js/auth-config.js"></script>
     <script src="js/auth.js"></script>
@@ -98,18 +107,29 @@
             </div>
         </main>
 
-        <!-- 深度分析弹窗 -->
+        <!-- 深度分析弹窗（Markdown 实时渲染 + 编辑） -->
         <div class="paper-modal" id="deepModal">
-            <div class="paper-modal-content">
+            <div class="paper-modal-content deep-modal-content">
                 <div class="paper-modal-header">
                     <h2 id="deepModalTitle">Deep Analysis</h2>
-                    <button id="closeDeepModal" class="icon-button">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z" fill="currentColor"/>
-                        </svg>
-                    </button>
+                    <div class="deep-modal-toolbar">
+                        <button id="deepEditToggle" class="button" type="button">编辑</button>
+                        <button id="deepSaveBtn" class="button primary" type="button" style="display:none;">保存到远端</button>
+                        <span id="deepSaveStatus" class="deep-save-status"></span>
+                        <button id="closeDeepModal" class="icon-button" title="关闭">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z" fill="currentColor"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
-                <div class="paper-modal-body" id="deepModalBody"></div>
+                <div class="paper-modal-body deep-modal-body">
+                    <p class="deep-meta-line" id="deepMetaLine"></p>
+                    <div class="deep-edit-pane" id="deepEditPane" style="display:none;">
+                        <textarea id="deepMarkdownInput" spellcheck="false" placeholder="在此编辑论文精读（Markdown，支持 KaTeX 公式与 GFM 表格）..."></textarea>
+                    </div>
+                    <article class="deep-preview markdown-body" id="deepPreview"></article>
+                </div>
             </div>
         </div>
     </div>

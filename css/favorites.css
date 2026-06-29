@@ -96,6 +96,143 @@
 .add-arxiv-status.error { color: #dc2626; }
 .add-arxiv-status.info { color: var(--primary, #4f46e5); }
 
+/* ===== 深度分析 Markdown 弹窗 ===== */
+.deep-modal-content {
+  width: min(1100px, 96vw);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.deep-modal-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deep-modal-toolbar .button {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.deep-save-status {
+  font-size: 12.5px;
+  color: var(--text-secondary, #64748b);
+}
+.deep-save-status.success { color: #16a34a; }
+.deep-save-status.error { color: #dc2626; }
+.deep-save-status.info { color: var(--primary, #4f46e5); }
+
+.deep-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+  padding: 16px 20px 24px;
+}
+
+.deep-meta-line {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-secondary, #64748b);
+}
+
+.deep-edit-pane {
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 8px;
+  background: #fbfbfd;
+}
+
+.deep-edit-pane textarea {
+  width: 100%;
+  min-height: 320px;
+  max-height: 50vh;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font: 13px/1.55 "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  resize: vertical;
+  background: transparent;
+  color: var(--text-primary, #1a202c);
+  box-sizing: border-box;
+  outline: none;
+}
+
+.deep-edit-pane textarea:focus {
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.deep-preview {
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 8px;
+  padding: 18px 22px;
+  background: #fff;
+  font-size: 14.5px;
+  line-height: 1.75;
+  color: var(--text-primary, #1a202c);
+  word-wrap: break-word;
+}
+
+.deep-preview h1,
+.deep-preview h2,
+.deep-preview h3,
+.deep-preview h4 {
+  margin: 1.4em 0 0.6em;
+  font-weight: 600;
+  color: var(--text-primary, #1a202c);
+}
+.deep-preview h1 { font-size: 22px; }
+.deep-preview h2 { font-size: 18px; border-bottom: 1px solid var(--border-color, #e2e8f0); padding-bottom: 4px; }
+.deep-preview h3 { font-size: 16px; }
+.deep-preview h4 { font-size: 14.5px; }
+.deep-preview p { margin: 0.7em 0; }
+.deep-preview ul,
+.deep-preview ol { padding-left: 1.4em; margin: 0.6em 0; }
+.deep-preview li { margin: 0.25em 0; }
+.deep-preview code {
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--primary, #4f46e5);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+}
+.deep-preview pre {
+  background: #f5f7fa;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 6px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.deep-preview pre code { background: transparent; color: inherit; padding: 0; }
+.deep-preview blockquote {
+  border-left: 3px solid var(--primary, #4f46e5);
+  padding: 4px 12px;
+  color: var(--text-secondary, #64748b);
+  background: rgba(99, 102, 241, 0.05);
+  margin: 0.6em 0;
+  border-radius: 4px;
+}
+.deep-preview table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  font-size: 13.5px;
+}
+.deep-preview th,
+.deep-preview td {
+  border: 1px solid var(--border-color, #e2e8f0);
+  padding: 6px 10px;
+  text-align: left;
+}
+.deep-preview th { background: #f8fafc; font-weight: 600; }
+.deep-preview tr:nth-child(2n) td { background: #fafbfc; }
+.deep-preview a { color: var(--primary, #4f46e5); text-decoration: none; }
+.deep-preview a:hover { text-decoration: underline; }
+.deep-preview .katex-display { overflow-x: auto; }
+
 /* TAG 筛选条 */
 .tag-filter-bar {
   display: flex;
