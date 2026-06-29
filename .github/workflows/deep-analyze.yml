@@ -69,12 +69,15 @@ jobs:
       - name: Run deep analysis
         run: |
           source .venv/bin/activate
-          mkdir -p data/deep
+          mkdir -p data/deep data/figures
           cd ai
           export OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
           export OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }}
           export LANGUAGE="${{ vars.LANGUAGE }}"
           export DEEP_MODEL_NAME="${{ vars.DEEP_MODEL_NAME }}"
+          # 透传仓库/分支信息，让 deep_enhance.py 把 figure src 写成 raw.githubusercontent 公开链接
+          export GITHUB_REPOSITORY="${{ github.repository }}"
+          export DATA_BRANCH="data"
           python deep_enhance.py \
             --id "${{ steps.inputs.outputs.paper_id }}" \
             --pdf "${{ steps.inputs.outputs.pdf }}" \
@@ -86,8 +89,10 @@ jobs:
 
       - name: Prepare deep-analysis files
         run: |
-          mkdir -p /tmp/deep_files/data/deep
+          mkdir -p /tmp/deep_files/data/deep /tmp/deep_files/data/figures
           cp -r data/deep/* /tmp/deep_files/data/deep/ 2>/dev/null || true
+          # figures 目录可能不存在（HTML 抓图成功时不写本地文件），用 || true 兜底
+          cp -r data/figures/* /tmp/deep_files/data/figures/ 2>/dev/null || true
           cp data/favorites.jsonl /tmp/deep_files/data/ 2>/dev/null || true
           cp data/tags_pending.json /tmp/deep_files/data/ 2>/dev/null || true
 
@@ -97,7 +102,7 @@ jobs:
           git config --global user.name "${{ vars.NAME }}"
 
           # 清理工作目录中可能冲突的未跟踪文件（已备份到 /tmp）
-          rm -rf data/deep 2>/dev/null || true
+          rm -rf data/deep data/figures 2>/dev/null || true
           rm -f data/favorites.jsonl data/tags_pending.json 2>/dev/null || true
 
           if git ls-remote --heads origin data | grep -q data; then
@@ -116,12 +121,14 @@ jobs:
             git push origin data
           fi
 
-          mkdir -p data/deep
+          mkdir -p data/deep data/figures
           cp -r /tmp/deep_files/data/deep/* data/deep/ 2>/dev/null || true
+          cp -r /tmp/deep_files/data/figures/* data/figures/ 2>/dev/null || true
           cp /tmp/deep_files/data/favorites.jsonl data/ 2>/dev/null || true
           cp /tmp/deep_files/data/tags_pending.json data/ 2>/dev/null || true
 
           git add data/deep/* 2>/dev/null || true
+          git add data/figures 2>/dev/null || true
           git add data/favorites.jsonl 2>/dev/null || true
           git add data/tags_pending.json 2>/dev/null || true
 

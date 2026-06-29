@@ -329,6 +329,38 @@
 .deep-preview a:hover { text-decoration: underline; }
 .deep-preview .katex-display { overflow-x: auto; }
 
+/* 论文插图：居中、限宽，附 caption */
+.deep-preview img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1em auto;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.deep-preview img[alt]:not([alt=""])::after {
+  content: attr(alt);
+  display: block;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-secondary, #64748b);
+  margin-top: 4px;
+}
+.deep-preview p > img:only-child {
+  margin-top: 0.6em;
+  margin-bottom: 0.2em;
+}
+.deep-preview p:has(> img:only-child) {
+  text-align: center;
+  color: var(--text-secondary, #64748b);
+  font-size: 12.5px;
+}
+.deep-preview p:has(> img:only-child) img {
+  margin-bottom: 0.3em;
+}
+
 /* TAG 筛选条 */
 .tag-filter-bar {
   display: flex;

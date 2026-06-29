@@ -58,6 +58,177 @@ def download_full_text(pdf_url: str) -> str:
         return ""
 
 
+def _figures_public_url(paper_id: str, relative_path: str) -> str:
+    """把 data 分支上的图片路径转成 raw.githubusercontent.com 可直接外链的 URL。
+    relative_path 形如 'data/figures/2401.12345/fig01.png'。
+    """
+    repo = os.environ.get("GITHUB_REPOSITORY") or ""
+    branch = os.environ.get("DATA_BRANCH", "data")
+    if not repo:
+        # 本地调试时退化成相对路径
+        return relative_path
+    return f"https://raw.githubusercontent.com/{repo}/{branch}/{relative_path}"
+
+
+# ===== 方案 A：从 arXiv HTML / ar5iv 抓 figure =====
+ARXIV_HTML_CANDIDATES = [
+    "https://arxiv.org/html/{id}",
+    "https://arxiv.org/html/{id}v1",
+    "https://ar5iv.labs.arxiv.org/html/{id}",
+]
+
+
+def fetch_arxiv_html_figures(paper_id: str):
+    """尝试从 arXiv HTML 版页面解析出 figure 列表。
+    返回 list of dict: [{label, caption, src}]，失败返回空列表。
+    """
+    for tpl in ARXIV_HTML_CANDIDATES:
+        url = tpl.format(id=paper_id)
+        try:
+            resp = requests.get(url, timeout=30, headers={"User-Agent": "daily-arxiv-deep-enhance"})
+            if resp.status_code != 200 or len(resp.text) < 2000:
+                continue
+            html = resp.text
+        except Exception as e:
+            print(f"arxiv html fetch failed for {url}: {e}", file=sys.stderr)
+            continue
+
+        figures = _parse_html_figures(html, base_url=url)
+        if figures:
+            print(f"got {len(figures)} figures from {url}", file=sys.stderr)
+            return figures
+    return []
+
+
+def _parse_html_figures(html: str, base_url: str):
+    """从 arXiv/ar5iv HTML 中提取 <figure> 块。极简正则实现，避免引入 BeautifulSoup 依赖。"""
+    figures = []
+    # 匹配 <figure ...>...</figure>
+    fig_blocks = re.findall(r"<figure\b[^>]*>([\s\S]*?)</figure>", html, flags=re.IGNORECASE)
+    for block in fig_blocks:
+        # 提取第一个 <img src="...">
+        m_img = re.search(r"<img[^>]*\bsrc=\"([^\"]+)\"", block, flags=re.IGNORECASE)
+        if not m_img:
+            continue
+        src = m_img.group(1).strip()
+        # 相对路径补成绝对
+        if src.startswith("//"):
+            src = "https:" + src
+        elif src.startswith("/"):
+            # ar5iv 的相对路径
+            from urllib.parse import urljoin
+            src = urljoin(base_url, src)
+        elif not src.startswith("http"):
+            from urllib.parse import urljoin
+            src = urljoin(base_url, src)
+
+        # 提取 caption：<figcaption>...</figcaption>
+        m_cap = re.search(r"<figcaption\b[^>]*>([\s\S]*?)</figcaption>", block, flags=re.IGNORECASE)
+        caption = ""
+        if m_cap:
+            caption = re.sub(r"<[^>]+>", " ", m_cap.group(1))
+            caption = re.sub(r"\s+", " ", caption).strip()
+
+        # 提取 label：例如 "Figure 1" / "Table 2"
+        label = ""
+        m_label = re.match(r"^(Figure|Fig\.|Table)\s*\d+[:.\s]", caption, flags=re.IGNORECASE)
+        if m_label:
+            label = m_label.group(0).rstrip(":.").strip()
+
+        figures.append({"label": label, "caption": caption[:600], "src": src})
+    return figures
+
+
+# ===== 方案 B：PyMuPDF 截图兜底 =====
+def fallback_pdf_figure_screenshots(pdf_bytes: bytes, paper_id: str, data_dir: str):
+    """当 arXiv HTML 抓不到图时，从 PDF 渲染整页 + 检测图片框，导出 PNG。
+    实际产物：data/figures/{id}/pageNN.png（整页截图），让 LLM 可以引用整页作为兜底。
+    返回 list of {label, caption, src}。
+    """
+    figures = []
+    out_dir = os.path.join(data_dir, "figures", paper_id)
+    os.makedirs(out_dir, exist_ok=True)
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    except Exception as e:
+        print(f"fallback open pdf failed: {e}", file=sys.stderr)
+        return figures
+
+    # 找含图片或矢量绘制密集的页面：用 page.get_image_info() 检测嵌入的位图
+    interesting_pages = []
+    for i, page in enumerate(doc):
+        try:
+            imgs = page.get_image_info()
+        except Exception:
+            imgs = []
+        if imgs and len(imgs) > 0:
+            interesting_pages.append(i)
+        else:
+            # 没有位图但有大量绘制路径（矢量图）的页也算
+            try:
+                drawings = page.get_drawings()
+            except Exception:
+                drawings = []
+            if len(drawings) >= 20:
+                interesting_pages.append(i)
+        # 上限 8 页，避免一篇论文截太多
+        if len(interesting_pages) >= 8:
+            break
+
+    for pidx in interesting_pages:
+        try:
+            page = doc[pidx]
+            pix = page.get_pixmap(dpi=150, alpha=False)
+            fname = f"page{pidx + 1:02d}.png"
+            fpath = os.path.join(out_dir, fname)
+            pix.save(fpath)
+            rel = f"data/figures/{paper_id}/{fname}"
+            figures.append({
+                "label": f"Page {pidx + 1}",
+                "caption": f"Page {pidx + 1} of the PDF (auto-rendered fallback because no figure-tagged HTML was found).",
+                "src": _figures_public_url(paper_id, rel),
+            })
+        except Exception as e:
+            print(f"fallback render page {pidx} failed: {e}", file=sys.stderr)
+
+    doc.close()
+    return figures
+
+
+def get_paper_figures(paper_id: str, pdf_url: str, data_dir: str):
+    """先尝试方案 A（HTML 图），失败则方案 B（PDF 渲染页截图）。
+    返回 (figures: list, source: str)。
+    """
+    figures = fetch_arxiv_html_figures(paper_id)
+    if figures:
+        return figures, "arxiv_html"
+
+    # 方案 B：先把 PDF 字节再下一次（小成本，避免和 download_full_text 共享状态）
+    try:
+        resp = requests.get(pdf_url, timeout=60)
+        resp.raise_for_status()
+        pdf_bytes = resp.content
+    except Exception as e:
+        print(f"fallback pdf download failed: {e}", file=sys.stderr)
+        return [], "none"
+
+    figs = fallback_pdf_figure_screenshots(pdf_bytes, paper_id, data_dir)
+    return figs, ("pdf_screenshot" if figs else "none")
+
+
+def format_figures_catalog(figures):
+    """把 figures 渲染成可粘贴给 LLM 的目录。"""
+    if not figures:
+        return "(no figures available)"
+    lines = []
+    for i, f in enumerate(figures, start=1):
+        label = f.get("label") or f"figure-{i}"
+        cap = (f.get("caption") or "").strip()
+        src = f.get("src") or ""
+        lines.append(f"- [{label}]({src}) — {cap}")
+    return "\n".join(lines)
+
+
 def load_known_tags(path: str):
     """读取 tags.json，返回 (list_of_names, formatted_string)。"""
     if not path or not os.path.exists(path):
@@ -240,6 +411,11 @@ def main():
 
     known_names, known_tags_str = load_known_tags(args.known_tags)
 
+    # 抓 figures（方案 A: arXiv HTML / 方案 B: PDF 整页截图兜底）
+    figures, fig_source = get_paper_figures(paper_id, pdf_url, args.data_dir)
+    figures_catalog = format_figures_catalog(figures)
+    print(f"figures: source={fig_source}, count={len(figures)}", file=sys.stderr)
+
     # deepseek-reasoner 是 thinking mode，不支持 tool/function calling。
     # 因此这里使用普通 chat completion，让模型输出严格 JSON，再在本地解析和 Pydantic 校验。
     llm = ChatOpenAI(model=model_name)
@@ -255,6 +431,7 @@ def main():
         "affiliations": args.affiliations,
         "known_tags": known_tags_str,
         "full_text": full_text,
+        "figures_catalog": figures_catalog,
     })
     raw_json = _extract_json_object(response.content)
     result = _normalize_deep_result(raw_json)
@@ -274,6 +451,9 @@ def main():
         "new_tags": result.get("new_tags", []),
         # 新版：整篇精读用一份连贯 Markdown 表达，前端编辑器直接渲染。
         "markdown": result.get("markdown", ""),
+        # 抓到的图：前端弹窗底部可作为「附录-图列表」展示，便于编辑时手动插入。
+        "figures": figures,
+        "figures_source": fig_source,
         # 元数据快照
         "summary_zh": result.get("summary_zh", ""),
         "authors": result.get("authors", ""),
