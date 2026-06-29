@@ -694,17 +694,54 @@ function parseArxivId(raw) {
 
 /** 通过 arXiv API 拉论文元数据。返回与本地 meta 兼容的对象。 */
 async function fetchArxivMeta(id) {
-    const url = `https://export.arxiv.org/api/query?id_list=${encodeURIComponent(id)}`;
-    const resp = await fetch(url, { headers: { 'Accept': 'application/atom+xml' } });
-    if (!resp.ok) {
-        return { ok: false, message: `arXiv API HTTP ${resp.status}` };
+    // 不要带任何自定义头，避免触发 CORS 预检导致 "Failed to fetch"。
+    // 依次尝试：官方 export 域名 → 主域 → 公开 CORS 代理。
+    const apiPaths = [
+        `https://export.arxiv.org/api/query?id_list=${encodeURIComponent(id)}`,
+        `https://arxiv.org/api/query?id_list=${encodeURIComponent(id)}`
+    ];
+    const corsProxies = [
+        (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+        (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+        (u) => `https://r.jina.ai/${u.replace(/^https?:\/\//, '')}`
+    ];
+    const candidates = [
+        ...apiPaths,
+        ...apiPaths.flatMap(u => corsProxies.map(p => p(u)))
+    ];
+
+    let lastErr = '';
+    let text = '';
+    for (const url of candidates) {
+        try {
+            const resp = await fetch(url, { cache: 'no-store' });
+            if (!resp.ok) {
+                lastErr = `HTTP ${resp.status} @ ${url}`;
+                continue;
+            }
+            text = await resp.text();
+            if (text && text.includes('<entry')) break;
+            lastErr = `空响应 @ ${url}`;
+            text = '';
+        } catch (e) {
+            lastErr = `${e.message || 'network error'} @ ${url}`;
+        }
     }
-    const text = await resp.text();
-    const xml = new DOMParser().parseFromString(text, 'application/xml');
+
+    if (!text) {
+        return { ok: false, message: `无法访问 arXiv API：${lastErr || '网络错误'}` };
+    }
+
+    let xml;
+    try {
+        xml = new DOMParser().parseFromString(text, 'application/xml');
+    } catch (e) {
+        return { ok: false, message: 'arXiv API 响应解析失败' };
+    }
     if (xml.querySelector('parsererror')) {
         return { ok: false, message: 'arXiv API 响应解析失败' };
     }
-    const entry = xml.querySelector('feed > entry');
+    const entry = xml.querySelector('feed > entry') || xml.querySelector('entry');
     if (!entry) return { ok: false, message: `arXiv 未找到该论文 (id=${id})` };
 
     const get = (sel) => (entry.querySelector(sel)?.textContent || '').trim();
@@ -737,6 +774,30 @@ async function fetchArxivMeta(id) {
             manual_added: true,
             added_at: new Date().toISOString()
         }
+    };
+}
+
+/** API/代理都挂掉时的最小元数据，至少让用户能把论文加入收藏。 */
+function buildMinimalArxivMeta(id) {
+    return {
+        title: id,
+        date: '',
+        abs: `https://arxiv.org/abs/${id}`,
+        pdf: `https://arxiv.org/pdf/${id}`,
+        authors: '',
+        categories: [],
+        details: '',
+        summary: '',
+        is_ab_test: false,
+        is_industrial_paper: false,
+        affiliation_type: 'unknown',
+        org_display: '',
+        industry_orgs: '',
+        code_url: '',
+        code_stars: 0,
+        manual_added: true,
+        meta_fetch_failed: true,
+        added_at: new Date().toISOString()
     };
 }
 
@@ -774,15 +835,27 @@ async function handleManualAddArxiv() {
         result = { ok: false, message: e.message || '网络错误' };
     }
 
-    if (!result.ok) {
-        btn.disabled = false;
-        btn.textContent = '添加';
-        setManualAddStatus(`抓取失败：${result.message}`, 'error');
-        return;
+    let metaToAdd;
+    if (result.ok) {
+        metaToAdd = result.meta;
+    } else {
+        // 抓取失败时给一个兜底入口：让用户自行决定是否仅以 ID 加入。
+        const proceed = confirm(
+            `抓取 arXiv 元数据失败：\n${result.message}\n\n` +
+            `是否仍然以最小信息（仅 ID/abs/pdf 链接）将 ${id} 加入收藏？\n` +
+            `你之后可以点击"深度分析"由后端从 PDF 中提取标题/作者/机构等信息。`
+        );
+        if (!proceed) {
+            btn.disabled = false;
+            btn.textContent = '添加';
+            setManualAddStatus(`抓取失败：${result.message}`, 'error');
+            return;
+        }
+        metaToAdd = buildMinimalArxivMeta(id);
     }
 
     // 写入本地
-    Favorites.add(id, result.meta);
+    Favorites.add(id, metaToAdd);
 
     // 同步到远端（若已配置 PAT）
     if (GitHubClient.hasToken()) {
@@ -790,16 +863,16 @@ async function handleManualAddArxiv() {
             const rows = Favorites.parseRemoteRows(old);
             const existing = rows.find(r => r.id === id) || {};
             const filtered = rows.filter(r => r.id !== id);
-            filtered.push(Favorites.metaToRemoteRow(id, result.meta, existing));
+            filtered.push(Favorites.metaToRemoteRow(id, metaToAdd, existing));
             return filtered.map(r => JSON.stringify(r)).join('\n') + '\n';
         }, `favorites: manually add ${id}`);
         if (!syncRes.ok) {
             setManualAddStatus(`已添加到本地，但远端同步失败：${syncRes.message || '未知错误'}`, 'error');
         } else {
-            setManualAddStatus(`已添加：${result.meta.title || id}`, 'success');
+            setManualAddStatus(`已添加：${metaToAdd.title || id}${metaToAdd.meta_fetch_failed ? '（元数据抓取失败，仅最小信息）' : ''}`, metaToAdd.meta_fetch_failed ? 'info' : 'success');
         }
     } else {
-        setManualAddStatus(`已添加到本地（未配置 PAT，无法跨浏览器同步）：${result.meta.title || id}`, 'info');
+        setManualAddStatus(`已添加到本地（未配置 PAT，无法跨浏览器同步）：${metaToAdd.title || id}`, 'info');
     }
 
     input.value = '';
