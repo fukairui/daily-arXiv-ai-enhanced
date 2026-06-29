@@ -243,49 +243,42 @@ header {
   text-decoration: none !important;
 }
 
-/* LLM4Rec 品牌 logo（替代左上角 GitHub 按钮） */
+/* LLM4Rec 品牌 logo（艺术线条字标，替代左上角 GitHub 按钮）
+   设计参考 ai4gc.org：纯单色描边、不闭合的字母组合 + 一条贯穿的推荐流箭头。 */
 .brand-logo {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  color: var(--text-color, #111);
   text-decoration: none !important;
   padding: 2px 4px;
-  border-radius: 10px;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  border-radius: 8px;
+  transition: opacity 0.18s ease, transform 0.18s ease;
 }
 .brand-logo:hover {
+  opacity: 0.72;
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.18);
 }
 .brand-logo-svg {
   flex: 0 0 auto;
-  filter: drop-shadow(0 2px 4px rgba(79, 70, 229, 0.25));
+  height: 42px;
+  width: auto;
+  display: block;
+  color: var(--text-color, #111);
 }
-.brand-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.05;
-}
-.brand-name {
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  background: linear-gradient(120deg, #7c3aed 0%, #4f46e5 55%, #06b6d4 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  font-family: "Inter", "JetBrains Mono", system-ui, -apple-system, sans-serif;
-}
-.brand-sub {
-  font-size: 10.5px;
-  font-weight: 500;
-  color: var(--text-secondary, #64748b);
-  letter-spacing: 0.5px;
-  text-transform: lowercase;
-  margin-top: 1px;
+/* 屏幕阅读器用文本（保留 LLM4Rec 字样，便于无障碍读屏） */
+.brand-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 @media (max-width: 720px) {
-  .brand-text { display: none; }
+  .brand-logo-svg { height: 34px; }
 }
 
 .github-button:hover {
