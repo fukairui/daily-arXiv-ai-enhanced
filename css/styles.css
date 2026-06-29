@@ -260,10 +260,12 @@ header {
 }
 .brand-logo-svg {
   flex: 0 0 auto;
-  height: 42px;
+  height: 50px;
   width: auto;
   display: block;
-  color: var(--text-color, #111);
+}
+@media (max-width: 720px) {
+  .brand-logo-svg { height: 38px; }
 }
 /* 屏幕阅读器用文本（保留 LLM4Rec 字样，便于无障碍读屏） */
 .brand-sr-only {
