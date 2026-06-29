@@ -57,6 +57,116 @@ def ensure_affiliations(item: Dict) -> str:
         item['affiliations'] = affiliations
     return affiliations
 
+KNOWN_INDUSTRY_ORGS = [
+    "Google", "Google Research", "DeepMind", "OpenAI", "Microsoft", "Microsoft Research",
+    "Meta", "Facebook", "Amazon", "Amazon Web Services", "AWS", "Apple", "NVIDIA",
+    "Netflix", "Adobe", "Salesforce", "IBM", "Intel", "Qualcomm", "Samsung",
+    "Huawei", "Noah's Ark Lab", "ByteDance", "TikTok", "Alibaba", "Ant Group",
+    "Tencent", "Baidu", "JD", "Meituan", "Kuaishou", "Xiaomi", "SenseTime",
+    "Shopee", "Grab", "Uber", "Airbnb", "LinkedIn", "Pinterest", "Spotify"
+]
+
+KNOWN_ACADEMIC_ORGS = [
+    "MIT", "Massachusetts Institute of Technology", "Stanford University", "Carnegie Mellon University",
+    "CMU", "UC Berkeley", "University of California", "UCLA", "UC San Diego", "UCSD",
+    "University of Washington", "UIUC", "University of Illinois", "Cornell University",
+    "Princeton University", "Harvard University", "Yale University", "Columbia University",
+    "University of Toronto", "University of Montreal", "Mila", "ETH Zurich", "EPFL",
+    "University of Oxford", "Oxford University", "University of Cambridge", "Cambridge University",
+    "Tsinghua University", "Peking University", "Zhejiang University", "Shanghai Jiao Tong University",
+    "Fudan University", "Nanjing University", "University of Science and Technology of China",
+    "Chinese Academy of Sciences", "CAS", "National University of Singapore", "NUS",
+    "Nanyang Technological University", "NTU", "KAIST", "Seoul National University"
+]
+
+ORG_ABBREVIATIONS = {
+    "Massachusetts Institute of Technology": "MIT",
+    "Carnegie Mellon University": "CMU",
+    "University of California, Berkeley": "UC Berkeley",
+    "University of California Berkeley": "UC Berkeley",
+    "University of California, San Diego": "UCSD",
+    "University of California San Diego": "UCSD",
+    "University of Illinois Urbana-Champaign": "UIUC",
+    "University of Illinois at Urbana-Champaign": "UIUC",
+    "National University of Singapore": "NUS",
+    "Nanyang Technological University": "NTU",
+    "Chinese Academy of Sciences": "CAS",
+    "Zhejiang University": "ZJU",
+    "Shanghai Jiao Tong University": "SJTU",
+    "University of Science and Technology of China": "USTC",
+    "Microsoft Research": "Microsoft",
+    "Google Research": "Google",
+    "Amazon Web Services": "AWS",
+    "Noah's Ark Lab": "Huawei",
+}
+
+def _dedupe_keep_order(values: List[str]) -> List[str]:
+    seen = set()
+    out = []
+    for value in values:
+        name = (value or '').strip().strip('.,;:()[]{}')
+        if not name:
+            continue
+        name = ORG_ABBREVIATIONS.get(name, name)
+        key = name.lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(name)
+    return out
+
+def infer_affiliation_from_text(affiliations: str) -> Dict:
+    """LLM 返回 unknown 时的规则兜底：只在提取文本里有较明确机构名时补全。"""
+    if not affiliations or not affiliations.strip():
+        return {}
+    text = re.sub(r"\s+", " ", affiliations)
+    lower = text.lower()
+
+    industry = [org for org in KNOWN_INDUSTRY_ORGS if org.lower() in lower]
+    academic = [org for org in KNOWN_ACADEMIC_ORGS if org.lower() in lower]
+
+    # 捕获常见完整学术机构名，补充 known list 未覆盖的大学/研究所。
+    academic_pattern = r"\b([A-Z][A-Za-z&.'\- ]{2,80}?(?:University|Institute|College|Academy|Laboratory|Lab|School))\b"
+    academic.extend(re.findall(academic_pattern, text))
+
+    industry = _dedupe_keep_order(industry)
+    academic = _dedupe_keep_order(academic)
+    orgs = _dedupe_keep_order(industry + academic)[:3]
+
+    if not orgs:
+        return {}
+
+    if industry and academic:
+        affiliation_type = "collaboration"
+    elif industry:
+        affiliation_type = "industry"
+    else:
+        affiliation_type = "academia"
+
+    return {
+        "affiliation_type": affiliation_type,
+        "is_industrial_paper": affiliation_type in ("industry", "collaboration"),
+        "org_display": ", ".join(orgs),
+        "industry_orgs": ", ".join(industry),
+    }
+
+def apply_affiliation_fallback(item: Dict, affiliations: str) -> None:
+    ai = item.get('AI') or {}
+    needs_fallback = (
+        not ai.get('org_display') or
+        ai.get('affiliation_type') in ('', 'unknown', None)
+    )
+    if not needs_fallback:
+        return
+    inferred = infer_affiliation_from_text(affiliations)
+    if not inferred:
+        return
+    for key, value in inferred.items():
+        if key == 'is_industrial_paper':
+            ai[key] = ai.get(key) or value
+        elif not ai.get(key) or ai.get(key) == 'unknown':
+            ai[key] = value
+    item['AI'] = ai
+
 def parse_args():
     """解析命令行参数"""
     parser = argparse.ArgumentParser()
@@ -170,6 +280,7 @@ def process_single_item(chain, item: Dict, language: str) -> Dict:
         # 一致性纠正:产学合作也算工业界参与
         if item['AI'].get('affiliation_type') in ('industry', 'collaboration'):
             item['AI']['is_industrial_paper'] = True
+        apply_affiliation_fallback(item, affiliations)
     except langchain_core.exceptions.OutputParserException as e:
         # 尝试从错误信息中提取 JSON 字符串并修复
         error_msg = str(e)
@@ -188,6 +299,7 @@ def process_single_item(chain, item: Dict, language: str) -> Dict:
         
         # Merge partial data with defaults to ensure all fields exist
         item['AI'] = {**default_ai_fields, **partial_data}
+        apply_affiliation_fallback(item, item.get('affiliations', ''))
         print(f"Using partial AI data for {item.get('id', 'unknown')}: {list(partial_data.keys())}", file=sys.stderr)
     except Exception as e:
         # Catch any other exceptions and provide default values
