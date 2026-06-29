@@ -369,10 +369,21 @@ function matchPapersByKeywordsOrAuthor(papers, keywords, author) {
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   initEventListeners();
 
   fetchGitHubStats();
+
+  // 跨浏览器同步：页面启动时先从 data/favorites.jsonl 恢复收藏状态，
+  // 再把本机已有收藏回填到远端，覆盖“旧收藏添加时还没有自动同步”的情况。
+  if (typeof Favorites !== 'undefined' && typeof GitHubClient !== 'undefined') {
+    try {
+      await Favorites.restoreFromRemote();
+      if (GitHubClient.hasToken()) await Favorites.syncAllToRemote();
+    } catch (e) {
+      console.warn('收藏同步初始化失败:', e);
+    }
+  }
 
   // 加载用户关键词
   loadUserKeywords();
@@ -983,25 +994,10 @@ function parseFavoriteRows(content) {
 }
 
 function favoriteMetaToRemoteRow(id, meta) {
-  return {
-    id,
-    title: meta.title || id,
-    date: meta.date || '',
-    authors: meta.authors || '',
-    categories: meta.categories || [],
-    details: meta.details || '',
-    is_ab_test: !!meta.is_ab_test,
-    is_industrial_paper: !!meta.is_industrial_paper,
-    affiliation_type: meta.affiliation_type || 'unknown',
-    org_display: meta.org_display || '',
-    industry_orgs: meta.industry_orgs || '',
-    code_url: meta.code_url || '',
-    code_stars: meta.code_stars || 0,
-    tags: Array.isArray(meta.tags) ? meta.tags : [],
-    summary: meta.summary || '',
-    has_deep: false,
-    favorited_at: new Date().toISOString(),
-  };
+  if (typeof Favorites !== 'undefined' && Favorites.metaToRemoteRow) {
+    return Favorites.metaToRemoteRow(id, meta || {});
+  }
+  return { id, title: (meta && meta.title) || id, favorited_at: new Date().toISOString() };
 }
 
 async function syncFavoriteToggleToRemote(id, meta, favored) {

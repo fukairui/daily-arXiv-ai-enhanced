@@ -21,6 +21,10 @@ document.addEventListener('DOMContentLoaded', init);
 async function init() {
     bindModal();
     await restoreFromRemote();
+    if (GitHubClient.hasToken()) {
+        const res = await Favorites.syncAllToRemote();
+        if (!res.ok) console.warn('本地收藏回填远端失败:', res.message || res);
+    }
     await loadKnownTags();
     await loadDeepForFavorites();
     render();
@@ -28,46 +32,8 @@ async function init() {
 
 /** 从 data 分支 favorites.jsonl 恢复收藏到本地（跨设备） */
 async function restoreFromRemote() {
-    const res = await GitHubClient.getFile('data/favorites.jsonl');
-    if (!res.exists || !res.content) return;
-    const ids = [];
-    const metaAll = Favorites.getMeta();
-    res.content.trim().split('\n').forEach(line => {
-        if (!line.trim()) return;
-        try {
-            const row = JSON.parse(line);
-            if (row.id) {
-                ids.push(row.id);
-                const currentMeta = metaAll[row.id] || {};
-                metaAll[row.id] = {
-                    ...currentMeta,
-                    title: currentMeta.title || row.title || row.id,
-                    date: currentMeta.date || row.date || '',
-                    pdf: currentMeta.pdf || `https://arxiv.org/pdf/${row.id}`,
-                    abs: currentMeta.abs || `https://arxiv.org/abs/${row.id}`,
-                    categories: currentMeta.categories || [],
-                    authors: currentMeta.authors || row.authors || '',
-                    details: currentMeta.details || row.details || '',
-                    is_ab_test: typeof currentMeta.is_ab_test === 'boolean' ? currentMeta.is_ab_test : !!row.is_ab_test,
-                    is_industrial_paper: typeof currentMeta.is_industrial_paper === 'boolean' ? currentMeta.is_industrial_paper : !!row.is_industrial_paper,
-                    affiliation_type: currentMeta.affiliation_type || row.affiliation_type || 'unknown',
-                    org_display: currentMeta.org_display || row.org_display || '',
-                    industry_orgs: currentMeta.industry_orgs || row.industry_orgs || '',
-                    code_url: currentMeta.code_url || row.code_url || '',
-                    code_stars: currentMeta.code_stars || row.code_stars || 0,
-                    // 如果本机手动编辑过标签/摘要，则本机结果优先，避免刷新时被远端旧数据覆盖。
-                    tags: currentMeta.tagsEditedLocally
-                        ? (currentMeta.tags || [])
-                        : (Array.isArray(row.tags) ? row.tags : (currentMeta.tags || [])),
-                    summary: currentMeta.summaryEditedLocally
-                        ? (currentMeta.summary || '')
-                        : (row.summary || currentMeta.summary || '')
-                };
-            }
-        } catch (e) { /* ignore */ }
-    });
-    Favorites._saveMeta(metaAll);
-    Favorites.merge(ids);
+    const res = await Favorites.restoreFromRemote();
+    if (!res.ok) console.warn('收藏远端恢复失败:', res.message || res);
 }
 
 /** 读取已确认标签库 tags.json */
@@ -510,70 +476,23 @@ async function ensureTagInLibrary(tagName) {
 }
 
 async function syncFavoriteTagsToRemote(id, tags) {
-    const meta = Favorites.metaOf(id) || {};
+    const meta = { ...(Favorites.metaOf(id) || {}), tags: uniqueTags(tags), has_deep: !!deepCache[id] };
     return GitHubClient.updateFileWithRetry('data/favorites.jsonl', (old) => {
-        const rows = [];
-        if (old) {
-            old.split('\n').forEach(line => {
-                if (!line.trim()) return;
-                try { rows.push(JSON.parse(line)); } catch (e) { /* ignore malformed row */ }
-            });
-        }
+        const rows = Favorites.parseRemoteRows(old);
+        const existing = rows.find(r => r.id === id) || {};
         const filtered = rows.filter(r => r.id !== id);
-        filtered.push({
-            id,
-            title: meta.title || id,
-            date: meta.date || '',
-            authors: meta.authors || '',
-            categories: meta.categories || [],
-            details: meta.details || '',
-            is_ab_test: !!meta.is_ab_test,
-            is_industrial_paper: !!meta.is_industrial_paper,
-            affiliation_type: meta.affiliation_type || 'unknown',
-            org_display: meta.org_display || '',
-            industry_orgs: meta.industry_orgs || '',
-            code_url: meta.code_url || '',
-            code_stars: meta.code_stars || 0,
-            tags: uniqueTags(tags),
-            summary: meta.summary || '',
-            has_deep: !!deepCache[id],
-            favorited_at: new Date().toISOString(),
-        });
+        filtered.push(Favorites.metaToRemoteRow(id, meta, existing));
         return filtered.map(r => JSON.stringify(r)).join('\n') + '\n';
     }, `favorites: update tags for ${id}`);
 }
 
 async function syncFavoriteMetaToRemote(id) {
-    const meta = Favorites.metaOf(id) || {};
-    const tags = Array.isArray(meta.tags) ? meta.tags : [];
+    const meta = { ...(Favorites.metaOf(id) || {}), has_deep: !!deepCache[id] };
     return GitHubClient.updateFileWithRetry('data/favorites.jsonl', (old) => {
-        const rows = [];
-        if (old) {
-            old.split('\n').forEach(line => {
-                if (!line.trim()) return;
-                try { rows.push(JSON.parse(line)); } catch (e) { /* ignore malformed row */ }
-            });
-        }
+        const rows = Favorites.parseRemoteRows(old);
+        const existing = rows.find(r => r.id === id) || {};
         const filtered = rows.filter(r => r.id !== id);
-        filtered.push({
-            id,
-            title: meta.title || id,
-            date: meta.date || '',
-            authors: meta.authors || '',
-            categories: meta.categories || [],
-            details: meta.details || '',
-            is_ab_test: !!meta.is_ab_test,
-            is_industrial_paper: !!meta.is_industrial_paper,
-            affiliation_type: meta.affiliation_type || 'unknown',
-            org_display: meta.org_display || '',
-            industry_orgs: meta.industry_orgs || '',
-            code_url: meta.code_url || '',
-            code_stars: meta.code_stars || 0,
-            tags: uniqueTags(tags),
-            summary: meta.summary || '',
-            has_deep: !!deepCache[id],
-            favorited_at: new Date().toISOString(),
-        });
+        filtered.push(Favorites.metaToRemoteRow(id, meta, existing));
         return filtered.map(r => JSON.stringify(r)).join('\n') + '\n';
     }, `favorites: update metadata for ${id}`);
 }
