@@ -63,13 +63,11 @@
                 <div class="header-left">
                     <a href="index.html" class="brand-logo" title="LLM4Rec">
                         <!--
-                          风格定位：把 "LLM4Rec" 做成一组艺术线条字标（参考 ai4gc 那种 hand-drawn 线条），
-                          但额外加入：
-                            1) 一道紫→青的彩色渐变笔画作为视觉焦点；
-                            2) 多颗"神经元"白心紫边的小圆点点缀在字母节点上；
-                            3) 一条贯穿底部的虚线 + 实心箭头，隐喻 recommendation flow；
-                            4) 4 字用粗体填充作色块强调，承接 "for" 的含义；
-                          这样既保留 ai4gc 的手绘线条骨架，又比纯单色更有层次。
+                          手绘涂鸦风格 LLM4Rec logo：
+                          - 渐变描边 + roughen filter 制造笔触抖动；
+                          - 字母按顺序 stroke 动画绘制（drawIn），形成"实时手写"效果；
+                          - 神经元节点呼吸闪烁；
+                          - 去掉了底部箭头，只保留字母骨架 + 装饰节点。
                         -->
                         <svg class="brand-logo-svg" width="220" height="56" viewBox="0 0 440 110" xmlns="http://www.w3.org/2000/svg" aria-label="LLM4Rec">
                             <defs>
@@ -82,32 +80,27 @@
                                     <stop offset="0%" stop-color="#7c3aed"/>
                                     <stop offset="100%" stop-color="#06b6d4"/>
                                 </linearGradient>
+                                <!-- 手绘抖动滤镜：用 turbulence + displacement 模拟笔触不规则 -->
+                                <filter id="roughen" x="-2%" y="-5%" width="104%" height="115%">
+                                    <feTurbulence type="fractalNoise" baseFrequency="0.025" numOctaves="2" seed="3" result="noise"/>
+                                    <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.8"/>
+                                </filter>
                             </defs>
-                            <g fill="none" stroke="url(#brandStroke)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
-                                <!-- L1 -->
-                                <path d="M20 18 L20 78 L72 78"/>
-                                <!-- L2 与 L1 交叠 -->
-                                <path d="M52 30 L52 78 L100 78"/>
-                                <!-- M：开放折线 -->
-                                <path d="M108 78 L108 22 L138 60 L168 22 L168 78"/>
-                                <!-- 4 的外轮廓（粗描边突出） -->
-                                <path d="M204 18 L182 64 L222 64 M212 28 L212 92" stroke="url(#brandFill4)" stroke-width="7"/>
-                                <!-- R -->
-                                <path d="M244 78 L244 22 L270 22 Q288 22 288 38 Q288 54 270 54 L244 54 M270 54 L292 78"/>
-                                <!-- e -->
-                                <path d="M304 60 Q304 38 322 38 Q340 38 340 56 L304 56 Q304 78 322 78 Q334 78 340 70"/>
-                                <!-- c -->
-                                <path d="M398 46 Q386 36 376 36 Q360 36 360 56 Q360 76 376 76 Q386 76 398 66"/>
-                                <!-- 推荐流向（虚线 + 箭头） -->
-                                <path d="M22 100 L408 100" stroke-dasharray="2 9" stroke-width="2.2" opacity="0.6"/>
-                                <path d="M398 92 L412 100 L398 108" stroke-width="3"/>
+                            <g class="brand-letters" filter="url(#roughen)" fill="none" stroke="url(#brandStroke)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path class="brand-letter" d="M20 18 L20 78 L72 78"/>
+                                <path class="brand-letter" d="M52 30 L52 78 L100 78"/>
+                                <path class="brand-letter" d="M108 78 L108 22 L138 60 L168 22 L168 78"/>
+                                <path class="brand-letter" d="M204 18 L182 64 L222 64 M212 28 L212 92" stroke="url(#brandFill4)" stroke-width="7"/>
+                                <path class="brand-letter" d="M244 78 L244 22 L270 22 Q288 22 288 38 Q288 54 270 54 L244 54 M270 54 L292 78"/>
+                                <path class="brand-letter" d="M304 60 Q304 38 322 38 Q340 38 340 56 L304 56 Q304 78 322 78 Q334 78 340 70"/>
+                                <path class="brand-letter" d="M398 46 Q386 36 376 36 Q360 36 360 56 Q360 76 376 76 Q386 76 398 66"/>
                             </g>
-                            <!-- 神经元点缀：白心 + 渐变描边 -->
-                            <g fill="#fff" stroke="url(#brandStroke)" stroke-width="2">
-                                <circle cx="20" cy="18" r="4"/>
-                                <circle cx="138" cy="60" r="5"/>
-                                <circle cx="292" cy="78" r="4"/>
-                                <circle cx="412" cy="100" r="4"/>
+                            <!-- 神经元点缀：呼吸动画 -->
+                            <g class="brand-dots" fill="#fff" stroke="url(#brandStroke)" stroke-width="2">
+                                <circle class="brand-dot" cx="20" cy="18" r="4"/>
+                                <circle class="brand-dot" cx="138" cy="60" r="5"/>
+                                <circle class="brand-dot" cx="292" cy="78" r="4"/>
+                                <circle class="brand-dot" cx="340" cy="56" r="3.5"/>
                             </g>
                         </svg>
                         <span class="brand-sr-only">LLM4Rec — daily arXiv AI enhanced</span>

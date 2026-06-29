@@ -267,6 +267,63 @@ header {
 @media (max-width: 720px) {
   .brand-logo-svg { height: 38px; }
 }
+
+/* 字母手写绘制动画：先把 stroke 看作 600 单位的虚线，从右侧偏移 600 隐藏，
+   再通过 stroke-dashoffset 0 让它"流"出来。轻微首屏 + 永久循环。 */
+.brand-letter {
+  stroke-dasharray: 600;
+  stroke-dashoffset: 600;
+  animation: brandDraw 2.8s ease-out forwards;
+}
+.brand-letter:nth-child(1) { animation-delay: 0.00s; }
+.brand-letter:nth-child(2) { animation-delay: 0.18s; }
+.brand-letter:nth-child(3) { animation-delay: 0.42s; }
+.brand-letter:nth-child(4) { animation-delay: 0.78s; }
+.brand-letter:nth-child(5) { animation-delay: 1.08s; }
+.brand-letter:nth-child(6) { animation-delay: 1.40s; }
+.brand-letter:nth-child(7) { animation-delay: 1.70s; }
+
+@keyframes brandDraw {
+  0%   { stroke-dashoffset: 600; }
+  70%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* 神经元呼吸：等绘制结束后开始放大缩小 + 亮度脉动 */
+.brand-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: brandPulse 2.2s ease-in-out infinite;
+}
+.brand-dots .brand-dot:nth-child(1) { animation-delay: 2.0s; }
+.brand-dots .brand-dot:nth-child(2) { animation-delay: 2.3s; }
+.brand-dots .brand-dot:nth-child(3) { animation-delay: 2.6s; }
+.brand-dots .brand-dot:nth-child(4) { animation-delay: 2.9s; }
+
+@keyframes brandPulse {
+  0%   { opacity: 0;   transform: scale(0.6); }
+  20%  { opacity: 1;   transform: scale(1.15); }
+  60%  { opacity: 0.85; transform: scale(0.95); }
+  100% { opacity: 1;   transform: scale(1); }
+}
+
+/* 鼠标悬停时整体轻微抖动一下，强化手绘感 */
+.brand-logo:hover .brand-letters {
+  animation: brandWiggle 0.7s ease-in-out;
+}
+@keyframes brandWiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25%      { transform: rotate(-0.6deg); }
+  50%      { transform: rotate(0.4deg); }
+  75%      { transform: rotate(-0.3deg); }
+}
+
+/* 用户偏好降低动画时还原 */
+@media (prefers-reduced-motion: reduce) {
+  .brand-letter { stroke-dashoffset: 0; animation: none; }
+  .brand-dot    { opacity: 1; animation: none; }
+}
 /* 屏幕阅读器用文本（保留 LLM4Rec 字样，便于无障碍读屏） */
 .brand-sr-only {
   position: absolute;
