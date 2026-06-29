@@ -102,9 +102,12 @@ const GitHubClient = {
      */
     getFile: async function(path) {
         try {
-            const url = `${this.API_BASE}/repos/${this._owner()}/${this._repo()}/contents/${path}?ref=${this._branch()}`;
-            const headers = this.hasToken() ? this._headers() : { 'Accept': 'application/vnd.github+json' };
-            const resp = await fetch(url, { headers });
+            // 强制绕过浏览器与中间层缓存：加时间戳 query、no-store、跳过 ETag/If-None-Match。
+            // 否则在 read-modify-write 冲突重试时可能反复拿到旧 sha，导致 "does not match" 一直失败。
+            const url = `${this.API_BASE}/repos/${this._owner()}/${this._repo()}/contents/${path}?ref=${this._branch()}&_ts=${Date.now()}`;
+            const baseHeaders = this.hasToken() ? this._headers() : { 'Accept': 'application/vnd.github+json' };
+            const headers = { ...baseHeaders, 'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'If-None-Match': '' };
+            const resp = await fetch(url, { headers, cache: 'no-store' });
             if (resp.status === 404) return { exists: false, status: 404 };
             if (!resp.ok) return { exists: false, status: resp.status };
             const body = await resp.json();
@@ -200,26 +203,51 @@ const GitHubClient = {
         return this._enqueueFileUpdate(path, () => this._updateFileWithRetryNow(path, mutateFn, message, maxRetries));
     },
 
+    _extractLatestShaFromMessage: function(message) {
+        if (!message) return null;
+        const m = String(message).match(/does not match\s+([0-9a-f]{7,40})/i);
+        return m ? m[1] : null;
+    },
+
     _updateFileWithRetryNow: async function(path, mutateFn, message, maxRetries) {
         let lastMessage = '';
+        let overrideSha = null;
+        let overrideContent = null;
         for (let attempt = 0; attempt < maxRetries; attempt++) {
-            const current = await this.getFile(path);
-            if (!current.exists && current.status !== 404) {
-                lastMessage = `读取远端文件失败 (${current.status || 'network'})`;
-                await this._sleep(this._conflictBackoffMs(attempt));
-                continue;
+            let currentSha = overrideSha;
+            let oldContent = overrideContent;
+            if (currentSha === null) {
+                const current = await this.getFile(path);
+                if (!current.exists && current.status !== 404) {
+                    lastMessage = `读取远端文件失败 (${current.status || 'network'})`;
+                    await this._sleep(this._conflictBackoffMs(attempt));
+                    continue;
+                }
+                oldContent = current.exists ? current.content : null;
+                currentSha = current.sha || null;
             }
-            const oldContent = current.exists ? current.content : null;
+            overrideSha = null;
+            overrideContent = null;
             const newContent = mutateFn(oldContent);
             // 内容未变化则无需写入
             if (oldContent !== null && newContent === oldContent) {
                 return { ok: true };
             }
-            const res = await this.putFile(path, newContent, message, current.sha || null);
+            const res = await this.putFile(path, newContent, message, currentSha);
             if (res.ok) return { ok: true };
             lastMessage = res.message || `HTTP ${res.status}`;
             // 409 / 部分 422 是 sha 冲突：重新读取最新 sha，再用 mutateFn 合并一次后写入。
             if (this._isConflictLike(res)) {
+                // GitHub 422 "does not match <sha>" 错误里直接带着最新 sha：
+                // 取出后立刻再读一次最新内容，避免被任何缓存命中旧 sha。
+                const latestSha = this._extractLatestShaFromMessage(res.message);
+                if (latestSha && latestSha !== currentSha) {
+                    const refreshed = await this.getFile(path);
+                    if (refreshed.exists && refreshed.sha === latestSha) {
+                        overrideSha = refreshed.sha;
+                        overrideContent = refreshed.content;
+                    }
+                }
                 await this._sleep(this._conflictBackoffMs(attempt));
                 continue;
             }
