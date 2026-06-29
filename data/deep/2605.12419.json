@@ -3,38 +3,62 @@
   "title": "ORBIT: Preserving Foundational Language Capabilities in GenRetrieval via Origin-Regulated Merging",
   "model": "deepseek-reasoner",
   "language": "Chinese",
-  "analyzed_at": "2026-06-29T09:07:01.884184+00:00",
+  "analyzed_at": "2026-06-29T12:25:54.460251+00:00",
   "tags": [
     "Retrieve",
+    "Forgetting",
     "LLM as Rec"
   ],
   "new_tags": [],
-  "deep": {
-    "background": "生成式检索(GenRetrieval)是一种新兴的推荐范式，将项目编码为语义ID序列，利用自回归语言模型生成推荐结果。然而，将大语言模型(LLM)微调为GenRetrieval模型会导致严重的灾难性遗忘，使模型丧失通用语言和推理能力。先前的方法如事后模型合并(WiSE-FT)和固定间隔平均(Soup-to-Go)虽有一定缓解效果，但前者无法恢复足够性能，后者缺乏灵活性。",
-    "problem": "在GenRetrieval微调过程中，LLM的通用文本能力和推理能力在极短的训练步数(约2000步)内迅速丧失，文本基准性能降至随机水平。微调后的模型参数与初始模型参数的欧几里得距离和符号不相似度(SD)急剧增大，且遗忘速度与参数漂移高度相关。",
-    "motivation": "观察到遗忘与参数距离强相关(R²=0.83)，事后模型合并无法恢复性能，而固定间隔的权重平均方法虽然有效但未能自适应学习动态。因此，设计一种基于参数距离的自适应触发式合并方法，在训练过程中主动约束模型与初始参数的距离，有望在保持推荐性能的同时有效保留语言能力。",
-    "method_overview": "ORBIT(Origin-Regulated Back-Merging of Intermediate Trajectories)在微调过程中持续计算当前模型参数与初始参数之间的距离(使用L2范数或符号不相似度SD)。当距离超过预设阈值ε时，立即执行一次权重平均：将当前参数与初始参数等权平均，直至距离被拉回阈值之下。该过程在训练迭代中重复进行，从而将整个微调轨迹约束在以初始参数为中心的半径ε的球内。",
-    "method_details": "算法1给出具体流程：初始化参数θ_init；对每个训练步t，先进行梯度更新得到θ*_{t+1}；然后进入while循环，只要d(θ*_{t+1}, θ_init) > ε，就执行θ*_{t+1} = (θ*_{t+1} + θ_init)/2；循环结束后的θ*_{t+1}作为当前模型参数。距离度量排除随机初始化的SID词汇参数。使用符号不相似度SD=#符号翻转参数/总参数时，论文证明了有限次合并必定使SD归零(附录D)。实际中，合并次数通常为1次。ORBIT采用常数学习率以消除学习率衰减对合并的影响，训练步数延长至200k步。",
-    "experiments": "基座模型为Gemma3-1B IT和4B IT，数据集为Amazon Product Reviews的三个子集(Beauty, Sports and Outdoors, Toys and Games)。文本能力评估使用8个基准(包括BBH, GSM8K, MMLU-Pro, Drop, TriviaQA, HellaSwag, BoolQ, ARC-C)，取平均准确率。推荐性能使用NDCG@10和Recall@10。对比基线包括：无干预的原始模型和微调模型、L2权重衰减(λ=1e-4)、Soup-to-Go(固定间隔平均，k=2000/3000步)。ORBIT的超参数：学习率0.001，阈值ε=7e-3和7.5e-3，训练200k步。采用Pareto最优选择和距离理想点(DTIP)指标进行综合比较。",
-    "results_analysis": "ORBIT在所有三个数据集上均取得最低的DTIP值，表明在文本和检索性能间实现了最佳权衡。具体地，在Sports and Outdoors数据集上，ORBIT SD=7.5e-3的DTIP为0.49，优于Soup-to-Go k=2K的0.54和L2衰减的0.99。Pareto前沿图显示ORBIT的所有检查点均支配Soup-to-Go的检查点。分析合并间隔发现，ORBIT的调度是动态的：前期合并频繁(约1000步)，后期逐渐稳定在约3000步，这与固定间隔的Soup-to-Go显著不同。符号不相似度(SD)作为距离指标优于L2范数(如L2=50的DTIP为0.67，而SD=0.007的DTIP为0.55)。在4B模型上，ORBIT同样优于Soup-to-Go(ORBIT DTIP=0.42 vs Soup-to-Go DTIP=0.43)，且绝对性能更高。",
-    "conclusion": "ORBIT通过基于参数距离的自适应权重平均，有效缓解了GenRetrieval微调中的灾难性遗忘，在保留LLM通用语言能力的同时获得了有竞争力的推荐性能。该方法简洁、轻量(仅需保存初始参数和计算距离)，且优于现有正则化方法和固定间隔平均方法。ORBIT具有通用性，可推广至其他因微调导致严重遗忘的场景。",
-    "innovations": [
-      "提出基于参数距离的动态触发式权重平均方法ORBIT，能够在训练过程中自适应地约束模型漂移。",
-      "发现符号不相似度(SD)作为遗忘代理指标的有效性，并证明有限次合并可保证SD归零。",
-      "在GenRetrieval任务上系统量化了灾难性遗忘的速度和程度，并揭示其与参数距离的强相关性。"
-    ],
-    "limitations": [
-      "仅在全参数微调设置下验证，未考虑参数高效微调(PEFT)如LoRA。",
-      "实验仅限于1B和4B参数规模的小模型，未在更大规模(如70B)的LLM上测试。",
-      "需要保存初始模型参数，增加了存储开销(但仅需保存符号位时成本较低)。",
-      "距离阈值ε需要针对不同任务进行调参，缺乏自适应选择机制。"
-    ],
-    "future_work": [
-      "将ORBIT扩展到参数高效微调(如LoRA)场景，研究其在不同遗忘模式下的行为。",
-      "在更大规模的LLM(如7B, 70B)上验证方法的可扩展性。",
-      "探索更复杂的距离度量或自适应阈值机制，减少人工调参需求。",
-      "将ORBIT应用于其他自然语言处理任务(如分类、摘要)的微调遗忘缓解。"
-    ],
-    "related_comparison": "与经典L2权重衰减相比，ORBIT不通过惩罚项而是直接设置硬约束，效果显著更优。与事后模型合并(WiSE-FT等)相比，ORBIT在训练过程中多次合并，能够在遗忘不可逆之前进行干预，而事后合并无法恢复损失的语言能力。与固定间隔平均(Soup-to-Go)相比，ORBIT的合并调度是自适应的，前期更频繁以应对快速遗忘，后期逐渐稳定，这与固定间隔相比能在相同推荐性能下保留更多文本能力。"
-  }
+  "markdown": "## 1. 核心问题\n\n本文聚焦于生成式检索（Generative Retrieval, GenRetrieval）任务中，对大型语言模型（LLM）进行微调时引发的**灾难性遗忘**（catastrophic forgetting）问题。GenRetrieval 将推荐任务转化为自回归序列生成，要求模型同时拥有强大的文本理解/生成能力（通用语言能力）和推荐能力。然而，实验表明，标准微调会导致 LLM 的通用语言能力在极早期（约前 2000 步）内迅速衰退至随机水平，而事后模型合并（post-hoc weight interpolation）无法挽回。为此，作者提出 **ORBIT**（Origin-Regulated Back-merging of Intermediate Trajectories），一种在微调过程中动态跟踪当前参数与初始参数之间的距离，并在超过阈值时执行权重平均的正则化方法，旨在保持语言能力的同时获取推荐性能。\n\n## 2. 相关工作\n\n- **模型合并（Model Merging）**：如 Model Soups（Wortsman et al., 2022a）通过事后插值合并模型；LiNeS（Wang et al., 2025）按层缩放任务向量。但这些一次性的合并方法在 GenRetrieval 场景下失效。\n- **连续学习中的合并**：Soup-to-Go（Kleiman et al., 2025）在微调过程中每隔固定步数将当前权重与初始权重平均，被用作强基线。其他方法（如 MagMax、DAM）通常用于多任务或领域增量学习，而非单任务适应。\n- **正则化技术**：L2 权重衰减、弹性权重巩固（EWC）、数据回放等要求访问原始训练数据或计算 Fisher 信息，在 LLM 专有数据场景下不适用。\n- **GenRetrieval**：将物品编码为语义 ID（Semantic ID, SID），并通过自回归方式预测下一个物品的 ID 序列（Rajput et al., 2023）。本文将其扩展到 LLM 之上。\n\n## 3. 方法概览\n\nORBIT 的核心思想是在 GenRetrieval 微调期间，持续监控当前模型参数 $\\theta_{\\text{current}}$ 与初始 LLM 参数 $\\theta_{\\text{init}}$ 之间的距离度量 $d(\\cdot, \\cdot)$。当该距离超过预设阈值 $\\epsilon$ 时，立即执行一次“反向合并”（back-merging），即对当前参数和初始参数做简单算术平均：\n\n$$\n\\theta_{\\text{current}} \\leftarrow \\frac{\\theta_{\\text{current}} + \\theta_{\\text{init}}}{2}\n$$\n\n然后继续训练。此操作将模型拉回初始参数附近，从而保护原始语言能力。\n\n![Figure 1: ORBIT 方法概览](https://arxiv.org/html/2605.12419v1/figures/cropped-overview.png)\n\n**图 1说明**：展示了 ORBIT 的工作流程：微调过程中持续跟踪模型间距，当距离超过 $\\epsilon$ 时触发权重平均，将模型参数向初始原点牵引，以减轻遗忘。\n\n## 4. 方法细节\n\n### 4.1 距离度量\n\n论文尝试了两种距离度量：\n\n- **L2 距离**：$||\\theta_{\\text{init}} - \\theta_{\\text{current}}||_2$，反映参数变化的总体幅度。\n- **符号差异（Sign Dissimilarity, SD）**：\n  $$\n  \\text{SD} = \\frac{\\#\\text{对应参数符号不同的参数个数}}{\\text{模型总参数数}}\n  $$\n  SD 仅考虑参数符号是否翻转，计算高效（可用位异或），且能捕捉“有意义”的权重变化。\n\n实验中发现 SD 优于 L2，因其数值代表翻转比例，易于设置阈值且与文本性能有强相关性（见动机分析）。\n\n### 4.2 算法流程\n\n算法 1（ORBIT）：\n1. 输入：初始参数 $\\theta_{\\text{init}}$，总步数 $T$，阈值 $\\epsilon$，距离函数 $d$。\n2. 对于每个训练步 $t$：\n   - 执行优化器更新得到 $\\theta^*_{t+1}$。\n   - 当 $d(\\theta^*_{t+1}, \\theta_{\\text{init}}) > \\epsilon$ 时，反复执行反向合并直到距离降至阈值以下。\n3. 返回 $\\theta_T$。\n\n**重要细节**：\n- 语义 ID（SID）词汇表参数在初始时随机初始化，不参与距离计算，也不参与合并（因初始参数与微调后性能无关）。\n- 合并操作始终保持简单平均（系数 1/2），不引入额外超参数。\n- 如果一次合并未能使 SD 低于阈值，算法会连续合并；论文附录 D 证明了通过有限次合并即可使 SD 降至零。\n\n### 4.3 动机：距离与遗忘的相关性\n\n作者通过对 Soup-to-Go（固定间隔平均）训练过程中的检查点进行分析，发现平均文本性能与 SD 之间存在强线性关系（$R^2=0.83$），如图 4 所示。这表明参数距离是遗忘程度的一个轻量级、无梯度、无数据的代理指标。因此，直接限制距离可以保护语言能力。\n\n![Figure 4: SD 与文本性能的相关性](https://arxiv.org/html/2605.12419v1/x4.png)\n\n**图 4说明**：从 Soup-to-Go 训练中收集的不同检查点的 SD 与平均文本性能呈强负相关，说明距离是遗忘的良好指示器，为 ORBIT 使用距离作为合并触发条件提供了实证基础。\n\n## 5. 实验设置\n\n### 5.1 任务与数据\n\n- **基础模型**：Gemma3-1B-IT 和 Gemma3-4B-IT（指令微调版本）。\n- **推荐数据集**：Amazon Product Reviews 的三个子集：Beauty、Sports and Outdoors、Toys and Games。每个样本包含用户历史（最多 20 项，编码为 4 个 SID token）和下一个物品的 SID。\n- **文本基准**：8 个基准测试（BBH, GSM8K, MMLU-Pro, DROP, TriviaQA, HellaSwag, BoolQ, ARC-C），涵盖采样和评分评估，见表 1。\n\n### 5.2 基线\n\n- **无干预**：原始 LLM 和标准 GenRetrieval 微调模型。\n- **L2 权重衰减**：在损失中添加 $\\lambda ||\\theta - \\theta_{\\text{init}}||_2^2$。\n- **Soup-to-Go**：每固定步数 $k$ 进行一次平均（$k=2000, 3000$ 最优）。\n- **ORBIT**：使用 SD 阈值 $\\epsilon = 7.5\\times 10^{-3}, 7\\times 10^{-3}$ 以及 L2 阈值。\n\n### 5.3 评估指标\n\n- **推荐性能**：NDCG@10 和 Recall@10。\n- **语言能力**：8 个基准的平均准确率（或 F1）。\n- **联合指标**：距离理想点（DTIP），即归一化后的 $(T', R')$ 到点 $(1,1)$ 的欧氏距离（$T'$ 和 $R'$ 分别为文本和检索性能的 min-max 归一化）。\n\n## 6. 实验结果\n\n### 6.1 主结果\n\n表 3 展示了各方法在三个子集上的结果。ORBIT 在 DTIP 上普遍优于 Soup-to-Go 和 L2 衰减，同时保持较好的文本和推荐性能。\n\n| 方法 | Avg Text | NDCG@10 | Recall@10 | DTIP↓ |\n|------|----------|---------|-----------|-------|\n| Sports and Outdoors | | | | |\n| Soup-to-Go k=2K | 30.27 | 1.11 | 2.15 | 0.54 |\n| ORBIT SD=7.5e-3 | 28.95 | 1.37 | 2.58 | **0.49** |\n| Toys and Games | | | | |\n| Soup-to-Go k=2K | 28.55 | 2.54 | 4.36 | 0.50 |\n| ORBIT SD=7e-3 | 30.98 | 2.59 | 4.40 | **0.40** |\n| Beauty | | | | |\n| Soup-to-Go k=3K | 32.70 | 0.79 | 1.63 | 0.78 |\n| ORBIT SD=7.5e-3 | 25.33 | 2.28 | 4.37 | **0.62** |\n\n**关键观察**：\n- 仅使用反复平均的方法（Soup-to-Go 和 ORBIT）能在所有数据上实现非平凡的文本+检索性能；L2 衰减和事后合并几乎完全丧失文本能力。\n- ORBIT 在所有子集上的 DTIP 均优于最佳 Soup-to-Go 变体，且其 Pareto 前沿完全支配了 Soup-to-Go（见图 6）。\n\n![Figure 6: Pareto 最优检查点对比](https://arxiv.org/html/2605.12419v1/x6.png)\n\n**图 6说明**：在 Sports and Outdoors 验证集上，ORBIT 所有变体的非支配检查点全面优于 Soup-to-Go 和 L2 衰减基线，证明 ORBIT 能更好地平衡两个目标。\n\n### 6.2 缩放性\n\n在 Gemma3-4B-IT 上，ORBIT 和 Soup-to-Go 均取得更高绝对性能（文本性能约 48%，Recall@10 约 2.58），ORBIT 的 DTIP 略优（0.42 vs 0.43）。\n\n## 7. 分析\n\n### 7.1 合并调度的自适应性质\n\nORBIT 的合并触发基于实时距离，因此合并间隔会自适应地变化。图 7 显示，随着训练进行，合并间隔从几百步逐渐增大到约 3000 步并趋于稳定。这种灵活的调度不同于 Soup-to-Go 的固定间隔，可能是 ORBIT 获得更优 Pareto 前沿的原因之一。\n\n### 7.2 距离度量的选择\n\n表 4 对比了 SD 与 L2 距离：\n- SD 阈值 $7\\times10^{-3}$ 取得 DTIP 0.55；\n- L2 阈值 5 或 50 要么完全保留文本但丢失召回，要么过于宽松导致文本下降。\n- SD 更优因其提供更直观的“翻转比例”且与遗忘的相关性更强。\n\n### 7.3 计算开销\n\n距离计算（尤指 SD）仅需位运算，且只存储符号位（节约内存）。合并过程本身只有一次加法，几乎无额外开销。\n\n## 8. 创新点与亮点\n\n1. **任务设置新颖**：率先系统研究 LLM 在 GenRetrieval 微调中的灾难性遗忘问题，并提出了有效的缓解方法。\n2. **方法简单有效**：ORBIT 仅需跟踪距离和按阈值合并，不依赖原训练数据，不增加大量计算。\n3. **自适应调度**：基于距离的合并触发比固定间隔平均更灵活，能更好地平衡学习与保留。\n4. **实验扎实**：在 3 个推荐数据集和 8 个文本基准上验证，并进行了缩放实验和消融。\n\n## 9. 局限性与未来工作\n\n- **仅考虑全参数微调**：未探索 LoRA 等参数高效微调（PEFT）下的遗忘行为，PEFT 可能具有不同特性。\n- **模型规模有限**：仅在 1B 和 4B 模型上测试，在更大前沿模型（如 70B+）上的效果未知。\n- **合并策略固定**：平均系数固定为 1/2，未学习更复杂的合并权重或自适应系数。\n- **距离度量简单**：虽 SD 有效，但可能存在更优的度量（如考虑梯度或 Fisher 信息）。\n\n## 10. 与相关工作的对比\n\n| 方法 | 特点与本工作的关系 |\n|------|-------------------|\n| Soup-to-Go | 固定间隔平均，在 GenRetrieval 中需要极短间隔（$p=0.01$）才能有效；ORBIT 通过距离触发获得更优 Pareto。 |\n| Model Soups (post-hoc) | 事后合并完全无法恢复文本能力，因为遗忘发生太早。 |\n| L2 decay | 软约束，无法像 ORBIT 那样强制边界，导致文本性能几乎完全丧失。 |\n| EWC / Data Replay | 需要原始数据，不可行。 |\n\n## 11. 评价与启示\n\nORBIT 为解决 LLM 微调中的灾难性遗忘提供了一个极简但强大的基线。其核心洞察——参数距离可作为遗忘的有效代理——具有通用性，未来可扩展到其他任务（如对话、检索增强生成）。方法几乎无额外超参数（只需一个阈值 $\\epsilon$）且易于实现，很适合作为实际系统中的标准正则化手段。后续工作可能探索更复杂的合并策略（如时变加权）或结合 PEFT 以进一步降低开销。",
+  "figures": [
+    {
+      "label": "Figure 1",
+      "caption": "Figure 1 : An overview of our Orbit method. During the fine-tuning of the downstream task, inter-model distance is tracked; when this distance exceeds a threshold ϵ \\epsilon , weight averaging is used as a regularization step to reduce the forgetting of parametric knowledge from θ init \\theta_{\\text{init}} .",
+      "src": "https://arxiv.org/html/2605.12419v1/figures/cropped-overview.png"
+    },
+    {
+      "label": "",
+      "caption": "(a) Text benchmark evaluations before and after fine-tuning Gemma3-1B on the Amazon Review Sports and Outdoors dataset using GenRetrieval. After fine-tuning, performance drops significantly.",
+      "src": "https://arxiv.org/html/2605.12419v1/x1.png"
+    },
+    {
+      "label": "",
+      "caption": "(b) Recall@10 on the Amazon Review Toys and Games dataset and average text performance across our 8 benchmarks during the first 10k steps of baseline GenRetrieval fine-tuning.",
+      "src": "https://arxiv.org/html/2605.12419v1/x2.png"
+    },
+    {
+      "label": "Figure 3",
+      "caption": "Figure 3 : Average text accuracy and Recall@5 performance across post-hoc, one-round weight interpolations.",
+      "src": "https://arxiv.org/html/2605.12419v1/x3.png"
+    },
+    {
+      "label": "Figure 4",
+      "caption": "Figure 4 : A scatter plot demonstrating the correlation between sign dissimilarity (SD) and average text performance. Points are collected from a Soup-to-Go experiment with a cadence of 1000 steps.",
+      "src": "https://arxiv.org/html/2605.12419v1/x4.png"
+    },
+    {
+      "label": "Figure 5",
+      "caption": "Figure 5 : LLM-based GenRetrieval setup with separate text and SID vocabularies. Such a model can handle GenRetrieval queries with both SID tokens and text control tokens, and general LLM queries composed of solely text tokens.",
+      "src": "https://arxiv.org/html/2605.12419v1/x5.png"
+    },
+    {
+      "label": "Figure 6",
+      "caption": "Figure 6 : Text and recall performance for Orbit models, compared to a Soup-to-Go baseline and L2 decay baselines on the Sports and Outdoors dataset (validation) and our 8 text benchmarks. We display only Pareto-optimal checkpoints generated within each experiment. We can observe that all Orbit checkpoints outperform those generated from Soup-to-Go training.",
+      "src": "https://arxiv.org/html/2605.12419v1/x6.png"
+    },
+    {
+      "label": "Figure 7",
+      "caption": "Figure 7 : The number of steps between averaging events (indexed) in Orbit with a maximum sign dissimilarity of 0.007, over 200k training steps. The number of steps between averages increases during training, before settling around 3000 steps later in training.",
+      "src": "https://arxiv.org/html/2605.12419v1/figures/placeholders/tmp_orbit_schedule_analysis.png"
+    }
+  ],
+  "figures_source": "arxiv_html",
+  "summary_zh": "ORBIT 通过在 GenRetrieval 微调中动态跟踪模型参数与初始参数的距离，并在越过阈值时执行权重平均，有效缓解了 LLM 的灾难性遗忘，同时保留推荐性能和语言能力。",
+  "authors": "Neha Verma, Nikhil Mehta, Shao-Chuan Wang, Naijing Zhang, Alicia Tsai, Aniruddh Nath, Li Wei, Lukasz Heldt, Lichan Hong, Ed Chi, Xinyang Yi",
+  "org_display": "Johns Hopkins University, Google DeepMind, Google",
+  "industry_orgs": "Google DeepMind, Google",
+  "affiliation_type": "collaboration",
+  "is_industrial_paper": true,
+  "is_ab_test": false
 }
