@@ -139,11 +139,11 @@ def _parse_html_figures(html: str, base_url: str):
     return figures
 
 
-# ===== 方案 B：PyMuPDF 截图兜底 =====
+# ===== 方案 B：PyMuPDF 抽取页内嵌入图片 =====
 def fallback_pdf_figure_screenshots(pdf_bytes: bytes, paper_id: str, data_dir: str):
-    """当 arXiv HTML 抓不到图时，从 PDF 渲染整页 + 检测图片框，导出 PNG。
-    实际产物：data/figures/{id}/pageNN.png（整页截图），让 LLM 可以引用整页作为兜底。
-    返回 list of {label, caption, src}。
+    """方案 A 失败时，从 PDF 里抽取**嵌入的位图**（不是整页截图），导出为 PNG。
+    每张图带上所在页码，便于 LLM 关联 caption。
+    返回 list of {label, caption, src, kind}。
     """
     figures = []
     out_dir = os.path.join(data_dir, "figures", paper_id)
@@ -154,43 +154,68 @@ def fallback_pdf_figure_screenshots(pdf_bytes: bytes, paper_id: str, data_dir: s
         print(f"fallback open pdf failed: {e}", file=sys.stderr)
         return figures
 
-    # 找含图片或矢量绘制密集的页面：用 page.get_image_info() 检测嵌入的位图
-    interesting_pages = []
-    for i, page in enumerate(doc):
+    # 记录每个 xref 已写盘的文件名，避免一张图在多页出现时重复保存
+    saved_xrefs = {}
+    fig_index = 0
+    # 每页找一下页面附近的 "Figure N: ..." caption，关联给这一页的图（粗匹配，够用即可）
+    for pidx, page in enumerate(doc):
+        page_text = ""
         try:
-            imgs = page.get_image_info()
+            page_text = page.get_text() or ""
+        except Exception:
+            pass
+        # 粗略找出本页所有 "Figure N: ..." / "Fig. N: ..." 行
+        cap_matches = re.findall(
+            r"((?:Figure|Fig\.)\s*\d+[:.\u3002]?\s*[^\n]{0,300})",
+            page_text,
+        )
+        cap_iter = iter(cap_matches)
+
+        try:
+            imgs = page.get_images(full=True)
         except Exception:
             imgs = []
-        if imgs and len(imgs) > 0:
-            interesting_pages.append(i)
-        else:
-            # 没有位图但有大量绘制路径（矢量图）的页也算
+        for img in imgs:
+            xref = img[0]
+            # 过滤过小的图（图标/装饰），width/height 在 img[2:4]
             try:
-                drawings = page.get_drawings()
+                w, h = int(img[2]), int(img[3])
             except Exception:
-                drawings = []
-            if len(drawings) >= 20:
-                interesting_pages.append(i)
-        # 上限 8 页，避免一篇论文截太多
-        if len(interesting_pages) >= 8:
-            break
+                w, h = 0, 0
+            if w < 200 or h < 120:
+                continue
+            if xref in saved_xrefs:
+                fname = saved_xrefs[xref]
+            else:
+                try:
+                    info = doc.extract_image(xref)
+                except Exception as e:
+                    print(f"extract_image xref={xref} failed: {e}", file=sys.stderr)
+                    continue
+                ext = info.get("ext") or "png"
+                fname = f"fig-p{pidx + 1:02d}-{xref:04d}.{ext}"
+                fpath = os.path.join(out_dir, fname)
+                try:
+                    with open(fpath, "wb") as f:
+                        f.write(info.get("image") or b"")
+                except Exception as e:
+                    print(f"write {fpath} failed: {e}", file=sys.stderr)
+                    continue
+                saved_xrefs[xref] = fname
 
-    for pidx in interesting_pages:
-        try:
-            page = doc[pidx]
-            pix = page.get_pixmap(dpi=150, alpha=False)
-            fname = f"page{pidx + 1:02d}.png"
-            fpath = os.path.join(out_dir, fname)
-            pix.save(fpath)
+            fig_index += 1
+            caption = next(cap_iter, "").strip()
             rel = f"data/figures/{paper_id}/{fname}"
             figures.append({
-                "label": f"Page {pidx + 1} [LOW-QUALITY full-page fallback]",
-                "caption": f"WARNING: full-page screenshot of PDF page {pidx + 1}. Contains everything on that page (text + figures + headers/footers). DO NOT use this in the analysis unless absolutely necessary.",
+                "label": f"Embedded image on page {pidx + 1}" + (f" (likely {caption[:60]})" if caption else ""),
+                "caption": caption or f"Image embedded on page {pidx + 1} of the PDF; could be a figure/table.",
                 "src": _figures_public_url(paper_id, rel),
-                "kind": "pdf_full_page",
+                "kind": "pdf_embedded_image",
             })
-        except Exception as e:
-            print(f"fallback render page {pidx} failed: {e}", file=sys.stderr)
+            # 一篇论文上限 12 张，避免极端论文塞太多
+            if fig_index >= 12:
+                doc.close()
+                return figures
 
     doc.close()
     return figures

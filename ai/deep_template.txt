@@ -15,7 +15,8 @@ Available figures (already downloaded; each line is "- [label](image_url) — ca
 REQUIREMENTS FOR FIGURE USAGE (very important):
 - 严格"按需引用"：只有当一张图对**解释方法或核心实验结论真正必要**时才插入，**不要每节都塞一张图**。一篇精读引用 0~3 张图就够了；如果没有任何图是"必要的"，可以一张都不引。
 - 严禁仅为充门面而插入"团队 logo"、"页眉/页脚装饰"、"目录页"、"参考文献缩略图"、"广告图"等装饰类、低信息量图片。
-- **绝对禁止**引用任何 label 或 caption 中带有 `LOW-QUALITY full-page fallback`、`Page N`、`整页截图` 等字样的图——这些是 PDF 整页截图兜底，把论文整页文字+图都塞了进去，**完全不适合在阅读笔记里展示**。宁可一张图都不放，也不要插入这种整页截图。
+- **绝对禁止**引用任何 label 或 caption 中带有 `LOW-QUALITY full-page fallback`、`整页截图`、`Page N of the PDF` 等字样的图——这些是 PDF 整页截图兜底，把论文整页文字+图都塞了进去，**完全不适合在阅读笔记里展示**。宁可一张图都不放，也不要插入这种整页截图。
+- 如果是 `Embedded image on page N (likely Figure X: ...)` 这种从 PDF 抽取的嵌入位图，则可以正常按需引用——它就是论文里的单张图，不是整页。
 - 推荐的引用场景：
   - 「方法概览/方法细节」节：插入整体框架图或关键模块拓扑图（最多 1~2 张）。
   - 「实验结果」节：插入主结果图（如曲线/雷达图等表格无法替代的可视化）。
