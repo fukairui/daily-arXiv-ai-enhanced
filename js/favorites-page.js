@@ -225,6 +225,22 @@ function renderFavoriteInfo(m) {
     return rows.length ? `<div class="favorite-info-grid">${rows.join('')}</div>` : '';
 }
 
+function buildChatGPTDeepAnalysisPrompt(id, meta) {
+    const title = meta.title || id;
+    const pdf = meta.pdf || `https://arxiv.org/pdf/${id}`;
+    const authors = meta.authors || '未知';
+    const affiliations = meta.org_display || meta.affiliation_type || '未知';
+    const categories = formatCategories(meta.categories) || '未知';
+    const summary = meta.summary || '';
+    const abstractText = meta.details || '';
+
+    return `请你作为资深学术研究员，对下面这篇论文做“精读级”详细分析。\n\n论文标题：${title}\nPDF：${pdf}\n作者：${authors}\n机构/属性：${affiliations}\narXiv 类别：${categories}\n${summary ? `已有简要摘要：${summary}\n` : ''}${abstractText ? `论文 Abstract：${abstractText}\n` : ''}\n请尽量基于 PDF 全文内容进行分析，并用中文输出。请按以下结构回答：\n1. 领域背景\n2. 核心问题\n3. 研究动机\n4. 方法总览\n5. 方法细节\n6. 实验设置\n7. 结果与分析\n8. 主要创新点\n9. 局限性\n10. 未来工作\n11. 与相关工作的区别\n12. 适合打上的研究方向标签。`;
+}
+
+function buildChatGPTDeepAnalysisUrl(id, meta) {
+    return `https://chatgpt.com/?q=${encodeURIComponent(buildChatGPTDeepAnalysisPrompt(id, meta || {}))}`;
+}
+
 function getTagSuggestions(query) {
     const q = normalizeTagName(query).toLowerCase();
     if (!q) return [];
@@ -340,6 +356,7 @@ function renderList() {
         const tagsHtml = renderTagBadges(tags, id);
         const summaryText = m.summary || '';
         const infoHtml = renderFavoriteInfo(m);
+        const chatgptUrl = buildChatGPTDeepAnalysisUrl(id, m);
 
         const statusHtml = deep
             ? '<span class="deep-status done">已深度分析</span>'
@@ -381,6 +398,7 @@ function renderList() {
             </div>
             <div class="fav-card-actions">
                 <a class="button icon-button" href="${escapeHtml(m.abs || ('https://arxiv.org/abs/' + id))}" target="_blank" title="arXiv">abs</a>
+                <a class="button chatgpt-analysis-btn" href="${escapeHtml(chatgptUrl)}" target="_blank" title="用 ChatGPT 网页生成详细分析">ChatGPT分析</a>
                 ${deep ? `<button class="button view-deep-btn" data-id="${escapeHtml(id)}">查看分析</button>` : ''}
                 <button class="button primary analyze-btn" data-id="${escapeHtml(id)}">${deep ? '重跑分析' : '深度分析'}</button>
                 <button class="button unfav-btn" data-id="${escapeHtml(id)}" title="取消收藏">✕</button>
