@@ -96,6 +96,38 @@
 .add-arxiv-status.error { color: #dc2626; }
 .add-arxiv-status.info { color: var(--primary, #4f46e5); }
 
+/* 排序条容器：左侧是 TAG 筛选，右侧是排序下拉 */
+.fav-controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.fav-controls-bar > .tag-filter-bar { flex: 1 1 auto; min-width: 0; }
+.fav-sort-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-secondary, #64748b);
+  flex: 0 0 auto;
+}
+.fav-sort-select {
+  padding: 5px 8px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  color: var(--text-primary, #1a202c);
+  cursor: pointer;
+}
+.fav-sort-select:focus {
+  outline: none;
+  border-color: var(--primary, #4f46e5);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
 /* ===== 深度分析 Markdown 弹窗 ===== */
 /* 深度弹窗使用独立滚动模型：遮罩层不滚，content 固定在视口里，仅内部预览滚 */
 #deepModal {

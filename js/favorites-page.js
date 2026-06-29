@@ -15,12 +15,18 @@ const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 轮询超时
 let activeTagFilter = null;       // 当前 TAG 筛选；null 表示全部
 let deepCache = {};               // id -> deep json
 let knownTags = [];               // tags.json 中的标签
+const SORT_PREF_KEY = 'fav_sort_pref';
+let activeSort = (() => {
+    try { return localStorage.getItem(SORT_PREF_KEY) || 'favorited_desc'; }
+    catch (e) { return 'favorited_desc'; }
+})();
 
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
     bindModal();
     bindManualAdd();
+    bindSortControl();
     await restoreFromRemote();
     if (GitHubClient.hasToken()) {
         const res = await Favorites.syncAllToRemote();
@@ -295,6 +301,93 @@ function selectActiveSuggestion(input) {
     return true;
 }
 
+/* ---------- 排序：基于收藏时间 / 编辑时间 / 分析时间 / 论文日期 / 标题 ---------- */
+
+function _ts(v) {
+    if (!v) return 0;
+    const t = new Date(v).getTime();
+    return Number.isFinite(t) ? t : 0;
+}
+
+function _firstTs(...vals) {
+    for (const v of vals) {
+        const t = _ts(v);
+        if (t > 0) return t;
+    }
+    return 0;
+}
+
+function sortIdsBy(ids, sortKey, metaMap) {
+    if (!Array.isArray(ids) || ids.length === 0) return ids;
+    const meta = metaMap || Favorites.getMeta();
+    const arr = ids.slice();
+    const collator = new Intl.Collator('en', { sensitivity: 'base' });
+
+    const cmp = (a, b) => {
+        const ma = meta[a] || {};
+        const mb = meta[b] || {};
+        const da = deepCache[a] || {};
+        const db = deepCache[b] || {};
+
+        switch (sortKey) {
+            case 'favorited_asc':
+            case 'favorited_desc': {
+                const ta = _firstTs(ma.favorited_at, ma.added_at);
+                const tb = _firstTs(mb.favorited_at, mb.added_at);
+                return sortKey === 'favorited_desc' ? (tb - ta) : (ta - tb);
+            }
+            case 'edited_asc':
+            case 'edited_desc': {
+                // 优先 deep.edited_at（保存 markdown 时间），其次本地 summary/tags 编辑时间
+                const ta = _firstTs(da.edited_at, ma.summaryEditedAt, ma.tagsEditedAt);
+                const tb = _firstTs(db.edited_at, mb.summaryEditedAt, mb.tagsEditedAt);
+                return sortKey === 'edited_desc' ? (tb - ta) : (ta - tb);
+            }
+            case 'analyzed_asc':
+            case 'analyzed_desc': {
+                const ta = _ts(da.analyzed_at);
+                const tb = _ts(db.analyzed_at);
+                return sortKey === 'analyzed_desc' ? (tb - ta) : (ta - tb);
+            }
+            case 'date_asc':
+            case 'date_desc': {
+                const ta = _ts(ma.date);
+                const tb = _ts(mb.date);
+                return sortKey === 'date_desc' ? (tb - ta) : (ta - tb);
+            }
+            case 'title_desc':
+                return -collator.compare(ma.title || a, mb.title || b);
+            case 'title_asc':
+                return collator.compare(ma.title || a, mb.title || b);
+            case 'has_deep_first': {
+                const ha = !!deepCache[a];
+                const hb = !!deepCache[b];
+                if (ha !== hb) return ha ? -1 : 1;
+                // 同状态时按收藏时间倒序作为次键
+                return _firstTs(mb.favorited_at, mb.added_at) - _firstTs(ma.favorited_at, ma.added_at);
+            }
+            default:
+                return 0;
+        }
+    };
+    arr.sort(cmp);
+    return arr;
+}
+
+function bindSortControl() {
+    const select = document.getElementById('favSortSelect');
+    if (!select) return;
+    // 还原偏好
+    if ([...select.options].some(o => o.value === activeSort)) {
+        select.value = activeSort;
+    }
+    select.addEventListener('change', () => {
+        activeSort = select.value;
+        try { localStorage.setItem(SORT_PREF_KEY, activeSort); } catch (e) { /* ignore */ }
+        render();
+    });
+}
+
 function renderList() {
     const container = document.getElementById('favoritesList');
     let ids = Favorites.getIds();
@@ -303,6 +396,8 @@ function renderList() {
     if (activeTagFilter) {
         ids = ids.filter(id => getPaperTags(id, meta).includes(activeTagFilter));
     }
+    // 应用排序
+    ids = sortIdsBy(ids, activeSort, meta);
 
     if (ids.length === 0) {
         container.innerHTML = '<div class="loading-container"><p>还没有收藏，去主页点星收藏论文吧。</p></div>';

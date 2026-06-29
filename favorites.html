@@ -97,8 +97,26 @@
                     <div id="pendingTagsList" class="pending-tags-list"></div>
                 </div>
 
-                <!-- TAG 筛选条 -->
-                <div id="tagFilterBar" class="tag-filter-bar"></div>
+                <!-- TAG 筛选条 + 排序控件 -->
+                <div class="fav-controls-bar">
+                    <div id="tagFilterBar" class="tag-filter-bar"></div>
+                    <label class="fav-sort-wrap">
+                        <span>排序</span>
+                        <select id="favSortSelect" class="fav-sort-select">
+                            <option value="favorited_desc">收藏时间（最新优先）</option>
+                            <option value="favorited_asc">收藏时间（最早优先）</option>
+                            <option value="edited_desc">编辑分析时间（最新优先）</option>
+                            <option value="edited_asc">编辑分析时间（最早优先）</option>
+                            <option value="analyzed_desc">深度分析时间（最新优先）</option>
+                            <option value="analyzed_asc">深度分析时间（最早优先）</option>
+                            <option value="date_desc">论文发表日期（最新优先）</option>
+                            <option value="date_asc">论文发表日期（最早优先）</option>
+                            <option value="title_asc">标题 A→Z</option>
+                            <option value="title_desc">标题 Z→A</option>
+                            <option value="has_deep_first">已深度分析在前</option>
+                        </select>
+                    </label>
+                </div>
 
                 <!-- 收藏列表 -->
                 <div id="favoritesList" class="favorites-list">
