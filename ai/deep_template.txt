@@ -19,8 +19,13 @@ REQUIREMENTS FOR FIGURE USAGE (very important):
 - 推荐的引用场景：
   - 「方法概览/方法细节」节：插入整体框架图或关键模块拓扑图（最多 1~2 张）。
   - 「实验结果」节：插入主结果图（如曲线/雷达图等表格无法替代的可视化）。
+- **插图必须使用 HTML `<img>` 标签**，而非 Markdown `![]()` 语法，方便手动控制比例：
+  - 必须写：`<img src="..." alt="Figure 2: 框架总览" style="width:60%;">`
+  - 不要写：`![Figure 2: 框架总览](url)`
+  - `src` URL 只能来自上文 Available figures 列表，绝对不可凭空捏造；`alt` 必须有意义。
+  - 默认 `style="width:60%;"`；细节图可缩小到 40~50%；横向宽图（如曲线对比、宽表）使用 70~90%。**绝不要超过 100%**。
+  - HTML `<img>` 写在 markdown 里时，前后留空行使其独立成段。
 - 每张被引用的图后面必须用一两句中文说明它在论文中的作用与读者应关注什么，不要只放图不解释。
-- 引用时 alt 文本必须有意义：`![Figure 2: UniFormer 框架总览](url)`，不可写 `![image](url)` 或 `![Figure 2](url)` 这种空洞 alt。
 - 如果你判断列表中的所有图都不必要，请大胆**不要插入任何图片**，并在评价/启示一节简短说明"原文图主要是细化方法图，本笔记以文字+公式描述代替"。
 
 Full text of the paper (may be truncated):

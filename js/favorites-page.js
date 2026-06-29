@@ -763,7 +763,12 @@ function renderMarkdownInto(el, mdText) {
         html = `<pre>${escapeHtml(mdText || '')}</pre>`;
     }
     if (typeof DOMPurify !== 'undefined') {
-        el.innerHTML = DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'data-md-line'] });
+        // 显式保留 style / width / height / data-md-line，否则有些版本的 DOMPurify
+        // 会把 <img style="width:60%;"> 的 style 属性剥掉，导致 LLM 写的比例失效。
+        el.innerHTML = DOMPurify.sanitize(html, {
+            ADD_ATTR: ['target', 'data-md-line', 'style', 'width', 'height', 'align'],
+            ALLOW_DATA_ATTR: true
+        });
     } else {
         el.innerHTML = html;
     }
