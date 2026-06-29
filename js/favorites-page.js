@@ -724,12 +724,19 @@ function protectMathSegments(text) {
     return { masked: out, slots };
 }
 
-/** 把渲染后的 HTML 中的占位符替换回原始公式串，交给 KaTeX 渲染。 */
+/** 把渲染后的 HTML 中的占位符替换回原始公式串，交给 KaTeX 渲染。
+ *  注意：必须把公式中的 < > & 转义成 HTML 实体，否则浏览器会把 `c_{<i}` 中的 `<i`
+ *  误解析成 `<i>` 标签起始，吞掉后续内容导致 KaTeX 拿不到完整公式。
+ *  KaTeX auto-render 读取的是 DOM textContent，浏览器会自动把 &lt; 还原为 <。 */
 function restoreMathSegments(html, slots) {
     if (!html || !slots || slots.length === 0) return html;
     return html.replace(/MATHSLOTZ(\d+)ZMATHSLOTEND/g, (_, idx) => {
         const raw = slots[Number(idx)];
-        return raw != null ? raw : '';
+        if (raw == null) return '';
+        return raw
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
     });
 }
 
