@@ -44,6 +44,12 @@
       "desc": "用户手动添加的研究方向标签",
       "count": 1,
       "created_by": "user"
+    },
+    {
+      "name": "Forgetting",
+      "desc": "用户手动添加的研究方向标签",
+      "count": 1,
+      "created_by": "user"
     }
   ]
 }
