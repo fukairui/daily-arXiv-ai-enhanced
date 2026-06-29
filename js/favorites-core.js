@@ -141,10 +141,33 @@ const Favorites = {
         return rows;
     },
 
-    /** 把远端 favorites.jsonl 中的一行合并为本地元数据，保留本机手动编辑过的标签/摘要。 */
+    /** 把远端 favorites.jsonl 中的一行合并为本地元数据，保留本机手动编辑过的标签/摘要。
+     *  对于 affiliation_type / is_industrial_paper / org_display / industry_orgs / authors 等
+     *  AI 增强字段：远端如果给出了"有意义的值"（非空、非 unknown），优先采用远端，
+     *  避免上一轮失败留在本地的 unknown/空值挡住新的增强结果。
+     */
     remoteRowToMeta: function(row, currentMeta = {}) {
         const id = row.id;
         const rowCategories = Array.isArray(row.categories) ? row.categories : (row.categories ? [row.categories] : []);
+
+        // 远端是否给出了"实质值"：空字符串、null、undefined 不算
+        const remoteHas = (v) => v !== undefined && v !== null && v !== '';
+        // affiliation_type / org_display 等 AI 字段：本地是 unknown/空就用远端
+        const preferRemoteStr = (remoteVal, localVal, localUnknownTokens = []) => {
+            if (!remoteHas(remoteVal)) return localVal || '';
+            const localStr = (localVal || '').toString().trim().toLowerCase();
+            if (!localStr || localUnknownTokens.includes(localStr)) return remoteVal;
+            return localVal;
+        };
+        // bool 字段：本地若是 false 且远端是 true，则采用远端（前提是远端给了字段）
+        const preferRemoteBool = (remoteVal, localVal) => {
+            if (typeof remoteVal !== 'boolean') {
+                return (typeof localVal === 'boolean') ? localVal : !!remoteVal;
+            }
+            if (typeof localVal !== 'boolean') return remoteVal;
+            return localVal || remoteVal;
+        };
+
         return {
             ...currentMeta,
             title: currentMeta.title || row.title || id,
@@ -154,15 +177,17 @@ const Favorites = {
             categories: (Array.isArray(currentMeta.categories) && currentMeta.categories.length > 0)
                 ? currentMeta.categories
                 : rowCategories,
-            authors: currentMeta.authors || row.authors || '',
-            details: currentMeta.details || row.details || '',
-            is_ab_test: typeof currentMeta.is_ab_test === 'boolean' ? currentMeta.is_ab_test : !!row.is_ab_test,
-            is_industrial_paper: typeof currentMeta.is_industrial_paper === 'boolean' ? currentMeta.is_industrial_paper : !!row.is_industrial_paper,
-            affiliation_type: currentMeta.affiliation_type || row.affiliation_type || 'unknown',
-            org_display: currentMeta.org_display || row.org_display || '',
-            industry_orgs: currentMeta.industry_orgs || row.industry_orgs || '',
-            code_url: currentMeta.code_url || row.code_url || '',
-            code_stars: currentMeta.code_stars || row.code_stars || 0,
+            authors: preferRemoteStr(row.authors, currentMeta.authors),
+            details: preferRemoteStr(row.details, currentMeta.details),
+            // bool：本地 false 不应该挡住远端 true
+            is_ab_test: preferRemoteBool(row.is_ab_test, currentMeta.is_ab_test),
+            is_industrial_paper: preferRemoteBool(row.is_industrial_paper, currentMeta.is_industrial_paper),
+            // 字符串型 AI 字段：本地 unknown/空时让远端胜出
+            affiliation_type: preferRemoteStr(row.affiliation_type, currentMeta.affiliation_type, ['unknown']),
+            org_display: preferRemoteStr(row.org_display, currentMeta.org_display),
+            industry_orgs: preferRemoteStr(row.industry_orgs, currentMeta.industry_orgs),
+            code_url: preferRemoteStr(row.code_url, currentMeta.code_url),
+            code_stars: (currentMeta.code_stars && currentMeta.code_stars > 0) ? currentMeta.code_stars : (row.code_stars || 0),
             tags: currentMeta.tagsEditedLocally
                 ? (currentMeta.tags || [])
                 : (Array.isArray(row.tags) ? row.tags : (currentMeta.tags || [])),
