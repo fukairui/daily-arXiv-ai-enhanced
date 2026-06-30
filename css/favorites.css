@@ -463,15 +463,52 @@
   z-index: 10000;
   padding: 32px;
   cursor: zoom-out;
+  /* 防止滚动事件冒泡到外层、防止浏览器按住 Cmd+滚轮触发页面缩放 */
+  overscroll-behavior: contain;
+  touch-action: none;
 }
 .deep-img-lightbox.active { display: flex; flex-direction: column; }
+.deep-img-lightbox-toolbar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  align-self: center;
+}
+.deep-img-btn {
+  padding: 4px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.deep-img-btn:hover { background: rgba(255, 255, 255, 0.22); }
+.deep-img-lightbox-stage {
+  flex: 1 1 auto;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: zoom-in;
+  /* 关键：把缩放限制在这个容器内，避免影响外面的页面 */
+  contain: layout paint;
+}
 .deep-img-lightbox-img {
   max-width: 95vw;
-  max-height: 85vh;
+  max-height: 80vh;
   object-fit: contain;
   border-radius: 6px;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
   background: #fff;
+  user-select: none;
+  -webkit-user-drag: none;
+  /* 由 JS 设置 transform */
+  transform-origin: center center;
+  transition: transform 0.05s linear;
+  will-change: transform;
 }
 .deep-img-lightbox-caption {
   margin-top: 12px;
@@ -479,6 +516,7 @@
   font-size: 13px;
   text-align: center;
   max-width: 90vw;
+  align-self: center;
 }
 .deep-preview img[alt]:not([alt=""])::after {
   content: attr(alt);

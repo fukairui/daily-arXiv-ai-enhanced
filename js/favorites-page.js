@@ -967,6 +967,21 @@ function renderMarkdownInto(el, mdText) {
 }
 
 /* ---------- 图片点击放大查看 (lightbox) ---------- */
+let _lightboxState = { scale: 1, tx: 0, ty: 0, dragging: false, lastX: 0, lastY: 0 };
+
+function _applyLightboxTransform(imgEl) {
+    if (!imgEl) return;
+    imgEl.style.transform = `translate(${_lightboxState.tx}px, ${_lightboxState.ty}px) scale(${_lightboxState.scale})`;
+}
+
+function _resetLightboxState(imgEl) {
+    _lightboxState = { scale: 1, tx: 0, ty: 0, dragging: false, lastX: 0, lastY: 0 };
+    if (imgEl) {
+        imgEl.style.transform = '';
+        imgEl.style.cursor = 'zoom-in';
+    }
+}
+
 function openImageLightbox(src, alt) {
     if (!src) return;
     let overlay = document.getElementById('deepImgLightbox');
@@ -975,20 +990,116 @@ function openImageLightbox(src, alt) {
         overlay.id = 'deepImgLightbox';
         overlay.className = 'deep-img-lightbox';
         overlay.innerHTML = `
-            <img class="deep-img-lightbox-img" alt="">
+            <div class="deep-img-lightbox-toolbar">
+                <button type="button" class="deep-img-btn" data-act="zoom-in" title="放大 (+)">＋</button>
+                <button type="button" class="deep-img-btn" data-act="zoom-out" title="缩小 (-)">−</button>
+                <button type="button" class="deep-img-btn" data-act="reset" title="重置 (0)">重置</button>
+                <button type="button" class="deep-img-btn" data-act="close" title="关闭 (Esc)">关闭</button>
+            </div>
+            <div class="deep-img-lightbox-stage">
+                <img class="deep-img-lightbox-img" alt="" draggable="false">
+            </div>
             <div class="deep-img-lightbox-caption"></div>
         `;
-        overlay.addEventListener('click', () => overlay.classList.remove('active'));
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && overlay.classList.contains('active')) {
+        document.body.appendChild(overlay);
+
+        const stage = overlay.querySelector('.deep-img-lightbox-stage');
+        const imgEl = overlay.querySelector('.deep-img-lightbox-img');
+
+        // 关闭：点遮罩或点工具栏关闭按钮
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
                 overlay.classList.remove('active');
+                _resetLightboxState(imgEl);
             }
         });
-        document.body.appendChild(overlay);
+        // 工具栏：放大/缩小/重置/关闭
+        overlay.querySelector('.deep-img-lightbox-toolbar').addEventListener('click', (e) => {
+            const btn = e.target.closest('button[data-act]');
+            if (!btn) return;
+            e.stopPropagation();
+            const act = btn.dataset.act;
+            if (act === 'zoom-in') {
+                _lightboxState.scale = Math.min(_lightboxState.scale * 1.2, 8);
+                _applyLightboxTransform(imgEl);
+            } else if (act === 'zoom-out') {
+                _lightboxState.scale = Math.max(_lightboxState.scale / 1.2, 0.5);
+                _applyLightboxTransform(imgEl);
+            } else if (act === 'reset') {
+                _resetLightboxState(imgEl);
+            } else if (act === 'close') {
+                overlay.classList.remove('active');
+                _resetLightboxState(imgEl);
+            }
+        });
+        // 滚轮缩放（仅图片区域；阻止页面滚动/缩放）
+        stage.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = -e.deltaY;
+            const factor = Math.exp(delta * 0.0015);
+            const next = Math.max(0.5, Math.min(8, _lightboxState.scale * factor));
+            _lightboxState.scale = next;
+            _applyLightboxTransform(imgEl);
+        }, { passive: false });
+        // 拖拽平移：只在已放大时启用
+        imgEl.addEventListener('mousedown', (e) => {
+            if (_lightboxState.scale <= 1.001) return;
+            _lightboxState.dragging = true;
+            _lightboxState.lastX = e.clientX;
+            _lightboxState.lastY = e.clientY;
+            imgEl.style.cursor = 'grabbing';
+            e.preventDefault();
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (!_lightboxState.dragging) return;
+            _lightboxState.tx += (e.clientX - _lightboxState.lastX);
+            _lightboxState.ty += (e.clientY - _lightboxState.lastY);
+            _lightboxState.lastX = e.clientX;
+            _lightboxState.lastY = e.clientY;
+            _applyLightboxTransform(imgEl);
+        });
+        window.addEventListener('mouseup', () => {
+            if (_lightboxState.dragging) {
+                _lightboxState.dragging = false;
+                imgEl.style.cursor = _lightboxState.scale > 1 ? 'grab' : 'zoom-in';
+            }
+        });
+        // 双击图片 → 在 1× 与 2.5× 之间切换
+        imgEl.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            if (_lightboxState.scale > 1.01) {
+                _resetLightboxState(imgEl);
+            } else {
+                _lightboxState.scale = 2.5;
+                _applyLightboxTransform(imgEl);
+                imgEl.style.cursor = 'grab';
+            }
+        });
+        // 键盘：Esc/+/-/0
+        document.addEventListener('keydown', (e) => {
+            if (!overlay.classList.contains('active')) return;
+            if (e.key === 'Escape') {
+                overlay.classList.remove('active');
+                _resetLightboxState(imgEl);
+            } else if (e.key === '+' || e.key === '=') {
+                e.preventDefault();
+                _lightboxState.scale = Math.min(_lightboxState.scale * 1.2, 8);
+                _applyLightboxTransform(imgEl);
+            } else if (e.key === '-' || e.key === '_') {
+                e.preventDefault();
+                _lightboxState.scale = Math.max(_lightboxState.scale / 1.2, 0.5);
+                _applyLightboxTransform(imgEl);
+            } else if (e.key === '0') {
+                e.preventDefault();
+                _resetLightboxState(imgEl);
+            }
+        });
     }
-    overlay.querySelector('.deep-img-lightbox-img').src = src;
-    overlay.querySelector('.deep-img-lightbox-img').alt = alt || '';
+    const imgEl = overlay.querySelector('.deep-img-lightbox-img');
+    imgEl.src = src;
+    imgEl.alt = alt || '';
     overlay.querySelector('.deep-img-lightbox-caption').textContent = alt || '';
+    _resetLightboxState(imgEl);
     overlay.classList.add('active');
 }
 
