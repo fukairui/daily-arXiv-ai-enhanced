@@ -322,11 +322,23 @@ def update_favorites_index(data_dir: str, paper_id: str, title: str, date: str, 
     rows = [r for r in rows if r.get("id") != paper_id]
 
     new_row = dict(old_row) if old_row else {}
+
+    # tags：用户优先，LLM 仅在"用户从未维护"时给个初值；不要覆盖用户已编辑/已存在的 tags。
+    old_tags = old_row.get("tags") if isinstance(old_row.get("tags"), list) else None
+    user_edited_tags = bool(old_row.get("tagsEditedLocally"))
+    if user_edited_tags:
+        merged_tags = old_tags if old_tags is not None else []
+    elif old_tags is not None and len(old_tags) > 0:
+        # 已有非空 tags（即使没标记 tagsEditedLocally）也尊重它，不要被 LLM 重写
+        merged_tags = old_tags
+    else:
+        merged_tags = list(tags or [])
+
     new_row.update({
         "id": paper_id,
         "title": title or old_row.get("title") or paper_id,
         "date": date or old_row.get("date") or "",
-        "tags": tags,
+        "tags": merged_tags,
         "has_deep": True,
         "favorited_at": old_row.get("favorited_at") or datetime.now(timezone.utc).isoformat(),
     })
