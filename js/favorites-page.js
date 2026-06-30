@@ -29,14 +29,24 @@ async function init() {
     bindManualAdd();
     bindSortControl();
     bindSearchControl();
-    await restoreFromRemote();
-    if (GitHubClient.hasToken()) {
-        const res = await Favorites.syncAllToRemote();
-        if (!res.ok) console.warn('本地收藏回填远端失败:', res.message || res);
-    }
-    await loadKnownTags();
-    await loadDeepForFavorites();
+
+    // 1) 立刻用本地缓存渲染：不等任何网络请求
+    loadDeepFromLocalCache();
     render();
+
+    // 2) 后台拉远端数据，拿到再增量刷新
+    (async () => {
+        await restoreFromRemote();
+        render();
+        if (GitHubClient.hasToken()) {
+            const res = await Favorites.syncAllToRemote();
+            if (!res.ok) console.warn('本地收藏回填远端失败:', res.message || res);
+        }
+        await loadKnownTags();
+        render();
+        // deep/{id}.json 数量多、单个大，单独并发拉，每篇拿到就更新；带 sha 缓存。
+        await refreshDeepForFavoritesIncremental();
+    })();
 }
 
 /** 从 data 分支 favorites.jsonl 恢复收藏到本地（跨设备） */
@@ -56,15 +66,92 @@ async function loadKnownTags() {
     }
 }
 
-/** 为所有收藏论文读取已有的深度分析（如已存在） */
+/** 为所有收藏论文读取已有的深度分析（如已存在）。
+ *  保留以便外部仍能调用；新版主流程走 loadDeepFromLocalCache + refreshDeepForFavoritesIncremental。 */
 async function loadDeepForFavorites() {
+    loadDeepFromLocalCache();
+    await refreshDeepForFavoritesIncremental();
+}
+
+/** localStorage 缓存的 deep 数据：{ [id]: { sha, data } }。 */
+const DEEP_CACHE_KEY = 'deep_cache_v1';
+
+function _loadDeepCacheFromStorage() {
+    try {
+        const raw = localStorage.getItem(DEEP_CACHE_KEY);
+        if (!raw) return {};
+        const obj = JSON.parse(raw);
+        return (obj && typeof obj === 'object') ? obj : {};
+    } catch (e) { return {}; }
+}
+
+function _persistDeepCache(map) {
+    try {
+        localStorage.setItem(DEEP_CACHE_KEY, JSON.stringify(map));
+    } catch (e) {
+        // localStorage 满了：把缓存清掉再尝试一次，仍失败则放弃
+        try {
+            localStorage.removeItem(DEEP_CACHE_KEY);
+            localStorage.setItem(DEEP_CACHE_KEY, JSON.stringify(map));
+        } catch (_) { /* ignore */ }
+    }
+}
+
+/** 立即从 localStorage 把 deepCache 填上，便于首屏直接渲染。 */
+function loadDeepFromLocalCache() {
     const ids = Favorites.getIds();
-    await Promise.all(ids.map(async id => {
-        const res = await GitHubClient.getFile(`data/deep/${id}.json`);
+    const cache = _loadDeepCacheFromStorage();
+    ids.forEach(id => {
+        if (cache[id] && cache[id].data) {
+            deepCache[id] = cache[id].data;
+        }
+    });
+}
+
+/** 后台增量拉取每篇 deep.json：sha 没变就跳过；拿到新的就更新内存 + 缓存 + 触发 render。 */
+async function refreshDeepForFavoritesIncremental() {
+    const ids = Favorites.getIds();
+    if (ids.length === 0) return;
+
+    const storage = _loadDeepCacheFromStorage();
+    let dirty = false;
+    let renderPending = false;
+    const scheduleRender = () => {
+        if (renderPending) return;
+        renderPending = true;
+        setTimeout(() => { renderPending = false; render(); }, 80);
+    };
+
+    // 一篇一个 promise，并发请求；浏览器会按 host 限制为 6 路并发。
+    await Promise.all(ids.map(async (id) => {
+        const knownSha = (storage[id] && storage[id].sha) || null;
+        const res = await GitHubClient.getFileIfChanged(`data/deep/${id}.json`, knownSha);
+        if (res.status === 304) {
+            // 未变：本地缓存即权威，无需操作
+            return;
+        }
         if (res.exists && res.content) {
-            try { deepCache[id] = JSON.parse(res.content); } catch (e) { /* ignore */ }
+            try {
+                const parsed = JSON.parse(res.content);
+                deepCache[id] = parsed;
+                storage[id] = { sha: res.sha, data: parsed };
+                dirty = true;
+                scheduleRender();
+            } catch (e) {
+                console.warn(`parse deep/${id}.json failed`, e);
+            }
+        } else if (res.status === 404) {
+            // 远端被删除（极少见）：清掉本地缓存
+            if (storage[id]) {
+                delete storage[id];
+                delete deepCache[id];
+                dirty = true;
+                scheduleRender();
+            }
         }
     }));
+
+    if (dirty) _persistDeepCache(storage);
 }
 
 /** 读取待确认标签 */

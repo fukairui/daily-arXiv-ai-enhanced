@@ -125,6 +125,38 @@ const GitHubClient = {
     },
 
     /**
+     * 读取文件，但若 knownSha 与远端 sha 一致，则不返回内容（status: 304），便于本地缓存命中时跳过下载。
+     * 与 getFile 不同的是：此方法不带时间戳，允许浏览器/中间层缓存；
+     * 这是安全的因为我们用 sha 比对，不会拿到错误数据。
+     * @param {string} path
+     * @param {string|null} knownSha 上次本地缓存的 sha，若提供且远端 sha 相同则返回 { status: 304 }
+     * @returns {Promise<{exists:boolean, status:number, sha?:string, content?:string, message?:string}>}
+     */
+    getFileIfChanged: async function(path, knownSha) {
+        try {
+            const url = `${this.API_BASE}/repos/${this._owner()}/${this._repo()}/contents/${path}?ref=${this._branch()}`;
+            const headers = this.hasToken() ? this._headers() : { 'Accept': 'application/vnd.github+json' };
+            const resp = await fetch(url, { headers });
+            if (resp.status === 404) return { exists: false, status: 404 };
+            if (!resp.ok) return { exists: false, status: resp.status };
+            const body = await resp.json();
+            const sha = body.sha;
+            if (knownSha && sha === knownSha) {
+                // sha 没变，不需要重新解析内容
+                return { exists: true, status: 304, sha };
+            }
+            return {
+                exists: true,
+                status: 200,
+                sha,
+                content: body.content ? this._fromBase64(body.content) : ''
+            };
+        } catch (e) {
+            return { exists: false, status: 0, message: e && e.message ? e.message : 'network error' };
+        }
+    },
+
+    /**
      * 通过 Contents API 写入/更新文件（PUT）。
      * @param {string} path 路径
      * @param {string} contentStr 文件文本内容
