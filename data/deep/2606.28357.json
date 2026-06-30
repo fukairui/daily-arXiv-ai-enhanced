@@ -1,0 +1,54 @@
+{
+  "id": "2606.28357",
+  "title": "ReasonRec: A Reasoning-Augmented Multimodal Agent for Unified Recommendation",
+  "model": "deepseek-reasoner",
+  "language": "Chinese",
+  "analyzed_at": "2026-06-30T06:09:37.270068+00:00",
+  "tags": [
+    "LLM as Rec",
+    "Agent",
+    "Industrial Recommender Systems"
+  ],
+  "new_tags": [],
+  "markdown": "## 1. 核心问题\n\n现有的多模态推荐系统尽管在特征融合上表现优异，但本质上是黑盒打分机制，缺乏显式推理和对自身不确定性的感知。它们在冷启动、时序偏移、跨域等挑战场景下，透明性、可解释性和鲁棒性严重不足。同时，单通道前向推理对所有查询一视同仁，无法动态调用轻量模型来平衡精度与效率。\n\n## 2. 相关工作\n\n- **生成式推荐模型**：从 Transformers4Rec、BERT4Rec 到 P5、VIP5、UniMP，逐渐利用 LLM 实现跨任务统一建模。多模态方向除融合视觉特征外，还包含可解释推荐（如 PETER、PEPLER）。\n- **视觉-语言模型与智能体**：LLaVA、BLIP-2、MiniGPT-4 等 VLM 展现出强大的视觉-语言推理能力，但参数量大、推理成本高。此前尚无工作系统地将 VLM 的显式推理链（CoT）引入推荐系统。\n\nReasonRec 首次将**观察‑思考‑行动**的显式推理范式与不确定性感知的工具委派引入多模态推荐，填补了该方向的空白。\n\n## 3. 方法概览\n\nReasonRec 的推理流水线分为三个阶段：**Observe**（通过预训练 VLM 编码器提取多模态嵌入 $h$）、**Deliberate**（将推荐任务重构为链式思考 VQA，结合证据视界课程学习）、**Act**（不确定性引导的工具委派）。\n\n<img src=\"https://arxiv.org/html/2606.28357v1/x4.png\" alt=\"Figure 3: ReasonRec 推理流水线\" style=\"width:60%;\">\n\n*图 3 展示了不确定性引导的规划机制：低风险查询（低 EH、高置信度）直接委派给轻量工具；中风险由 VLM 直接处理；高风险查询（高 EH、低置信度）调用多个工具融合后由 VLM 最终决策。*\n\n## 4. 方法细节\n\n### 4.1 推理感知的视觉指令微调 (R-VIT)\n\n将四种推荐任务统一转换为 VQA 格式：\n```\nUser: (item image, query text) <STOP>\nAssistant: [Thought Tokens] → answer <STOP>\n```\n其中 `[Thought Tokens]` 显式编码中间推理步骤（如调用哪个工具、置信度等）。\n\n引入**模板混合**策略：每个任务准备 10 种语言风格不同的模板，训练时随机采样，防止过拟合固定句式。\n\n### 4.2 证据视界（Evidence Horizon, EH）与课程学习\n\n定义用户 $u$ 的 EH 分数：\n$$C(u) = 1 - \\frac{|I_u|}{\\max_{u'} |I_{u'}|}$$\n$|I_u|$ 为用户交互数，分数越高表示交互越稀疏。\n\n训练分为三个阶段（如图 2）：\n1. **预热阶段**：优先采样低 EH（高频用户）样本，学习强关联模式。\n2. **渐进学习阶段**：逐步引入中等 EH 样本，提升泛化能力。\n3. **冷启动加强阶段**：密集训练高 EH 样本，同时降低学习率避免灾难性遗忘。\n\n<img src=\"https://arxiv.org/html/2606.28357v1/x2.png\" alt=\"Figure 2: 证据视界课程学习\" style=\"width:60%;\">\n\n*图 2 展示了学习率调度与 EH 采样概率的协同：前期专注低频用户，后期聚焦冷启动用户。*\n\n### 4.3 不确定性引导的工具委派\n\n规划器同时利用 EH 和模型置信度将查询分为三个风险等级：\n- **低风险**：低 EH & 高置信度 → 直接委派给经典轻量模型（如 LightSANs、xDeepFM），跳过 VLM。\n- **中风险**：中等不确定性 → 由 VLM 直接推理。\n- **高风险**：高 EH & 低置信度 → 先调用多个工具，聚合工具输出后交由 VLM 最终决策。\n\n工具仓库包含矩阵分解、图模型、双塔模型等，确保低风险查询的低延迟处理。\n\n## 5 实验设置\n\n- **数据集**：Amazon 四类（Clothing、Sports、Beauty、Toys）及 Pixel-1M（100 万用户、10 万图片、2000 万交互）。\n- **任务**：序列推荐、直接推荐、CTR 预估、解释生成。\n- **基线**：经典模型（SASRec、BPR-MF、LightGCN、AutoInt+ 等）与生成式模型（P5、VIP5、UniMP）。\n- **评估指标**：HR@5、NDCG@5（推荐）；AUC、LogLoss（CTR）；BLEU-4、ROUGE-L（解释生成）。\n\n## 6 实验结果\n\n### 6.1 主任务结果\n\n表 1（序列与直接推荐）：ReasonRec 在所有数据集上均显著超越最优基线。例如在 Sports 数据集上，序列推荐 HR@5 达 0.0721（次优均值 <0.05）；NDCG@5 达 0.0694。在 Pixel-1M 上直接推荐提升尤为突出：HR@5 0.0991 vs UniMP 0.0703。\n\n表 2（CTR 预估）：ReasonRec 在 AUC 和 LogLoss 上均最优，Sports 上 AUC 0.8429 vs 次优 0.8145。\n\n### 6.2 冷启动鲁棒性\n\n表 3 将 Pixel-1M 用户按交互频次分为 Coldest、Medium、Normal 三组。ReasonRec 在 Coldest 组 HR@5 达 0.0214，远超 UniMP 0.0155；且工具使用率从 7.3%（Normal）增至 35.7%（Coldest），表明规划器自适应利用外部模型。\n\n### 6.3 效率分析\n\n表 5 显示：ReasonRec 推理延迟约 499ms，与 VIP5 的 470ms 接近，但 HR@5 显著更高（0.0315 vs 0.0197）。通过低风险查询委派工具，有效控制计算开销。\n\n### 6.4 规划机制剖析\n\n- 表 4：ReasonRec 与工具输出分歧率达 13.6%，且在分歧情况下的准确率达 84.2%，说明模型不盲目服从工具，而具备自主判断能力。\n- 消融实验（原论文表 6）：移除课程学习、模板混合、工具委派任一组件均导致性能下降 10%~45%，其中课程学习贡献最大。\n\n## 7 创新点与亮点\n\n1. **首次**将显式链式推理（CoT）引入多模态推荐系统，构建 Observe‑Deliberate‑Act 结构化管道。\n2. 提出证据视界（EH）度量并设计渐进式课程学习，有效缓解冷启动问题。\n3. 不确定性引导的动态工具委派同时提升准确率与推理效率，低风险查询无需通过 VLM。\n4. 模板混合策略增强了模型对指令风格变化的鲁棒性。\n\n## 8 局限性与未来工作\n\n- 严重依赖预训练 VLM（LLaVA-7B）和手工模板，迁移到未知任务时模板质量可能成为瓶颈。\n- 工具仓库的经典模型需预选，可能无法泛化到未见过的推荐场景。\n- 多阶段推理和动态路由仍引入一定的延时（499ms/query），未来可探索更紧凑的规划机制。\n\n## 9 与相关工作的对比\n\n与 P5/VIP5 等生成式推荐相比，ReasonRec 不仅统一了任务格式，更通过显式推理链和不确定性自评估增强了可解释性；与 UniMP 等全 VLM 方案相比，ReasonRec 通过工具委派显著降低了计算成本，且在冷启动场景下表现更鲁棒。\n\n## 10 评价与启示\n\nReasonRec 是代理式思想在推荐系统中的一次成功实践。它证明：**显式推理 + 不确定性感知 + 动态委派**三位一体可以同时提升精度、可解释性与效率。该工作为工业级推荐系统向 Agentic 方向演进提供了清晰的技术路径。",
+  "figures": [
+    {
+      "label": "Figure 1",
+      "caption": "Figure 1 : Performance comparison across four basic recommendation tasks and three challenging scenarios. Each task (color-coded region) is evaluated on two metrics. All results are normalized such that the best baseline performance is set to 1.0 \\mathbf{1.0} for each metric-task pair. Markers representing \\ours indicate the relative improvement ratio over the strongest baseline, with values greater than demonstrating superiority. Experiment setups and results can be found in Sec. 4 .",
+      "src": "https://arxiv.org/html/2606.28357v1/x1.png"
+    },
+    {
+      "label": "Figure 2",
+      "caption": "Figure 2 : Evidence-horizon curriculum learning. Users are grouped into Low , Medium , and High EH based on interaction sparsity. The learning-rate schedule (A) is aligned with the sampling policy (B): training begins with dense users, gradually shifts to harder cases, and finally focuses on high-EH (cold-start) users. This staged strategy enhances ReasonRec’s reasoning under sparsity while mitigating forgetting on warm-user patterns.",
+      "src": "https://arxiv.org/html/2606.28357v1/x2.png"
+    },
+    {
+      "label": "Figure 3",
+      "caption": "Figure 3 : Overview of ReasonRec’s inference pipeline with uncertainty-guided planning . The planner jointly considers a user’s evidence horizon (EH) and model confidence to assign each query to one of three risk levels. Low-risk queries (low EH, high confidence) are delegated to lightweight models from the tool repository ; medium-risk queries are handled directly by the VLM; high-risk queries (high EH, low confidence) consult tools to refine the decision.",
+      "src": "https://arxiv.org/html/2606.28357v1/x4.png"
+    },
+    {
+      "label": "Table 6",
+      "caption": "Table 6 : Ablation study on the effectiveness of three proposed training strategies (1) the curriculum data scheduling, (2) mixture of data templates, and (3) the tools. Experiment settings follow Tab. 1 .",
+      "src": "https://arxiv.org/html/2606.28357v1/x5.png"
+    },
+    {
+      "label": "",
+      "caption": "Figure A1 : Examples of reasoning-aware instruction tuning . (I) Sequential recommendation for a user with low evidence horizon (EH) , where the agent confidently delegates the query to LightSANs+V for efficiency. (II) CTR prediction for a user with high EH and low model confidence; the planner therefore consults multiple lightweight tools (GCNv2, xDeepFM, DHEN) before producing the final answer. More examples are provided in Appx. A .",
+      "src": "https://arxiv.org/html/2606.28357v1/x6.png"
+    },
+    {
+      "label": "",
+      "caption": "Figure A2 : Performance comparison in sequential and direct recommendation under time shift. The statistics for both settings (with and without time shift) are sourced from Tab. 1 .",
+      "src": "https://arxiv.org/html/2606.28357v1/x7.png"
+    }
+  ],
+  "figures_source": "arxiv_html",
+  "summary_zh": "ReasonRec 通过显式推理管道（Observe-Deliberate-Act）和不确定性引导的工具委派，在多模态推荐任务上取得超过 30% 的排名指标提升，同时降低了推理延迟。",
+  "authors": "Yihua Zhang, Mingfu Liang, Jiyan Yang, Rong Jin, Wen-Yen Chen, Yiping Han, Huayu Li, Buyun Zhang, Liang Luo, Frank Shyu, Luke Simon, Sijia Liu, Tianlong Chen, Xi Liu",
+  "org_display": "Meta AI, Michigan State University, University of North Carolina at Chapel Hill",
+  "industry_orgs": "Meta AI",
+  "affiliation_type": "collaboration",
+  "is_industrial_paper": true,
+  "is_ab_test": false
+}
