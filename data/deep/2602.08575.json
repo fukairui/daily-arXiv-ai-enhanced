@@ -1,0 +1,49 @@
+{
+  "id": "2602.08575",
+  "title": "RankGR: Rank-Enhanced Generative Retrieval with Listwise Direct Preference Optimization in Recommendation",
+  "model": "deepseek-reasoner",
+  "language": "Chinese",
+  "analyzed_at": "2026-06-30T02:40:08.483704+00:00",
+  "tags": [
+    "LLM as Rec",
+    "Retrieve",
+    "Ranking"
+  ],
+  "new_tags": [],
+  "markdown": "## 1. 核心问题\n\n传统生成式检索（GR）采用下一个标记预测（NTP）范式，存在两个根本局限：1）无法建模用户偏好的层次部分序关系（如购买>点击>曝光未点击>伪曝光）；2）候选物品与用户行为序列之间缺乏深度交互（仅用内积近似）。RankGR 提出双阶段框架：初始评估阶段（IAP）引入列表直接偏好优化（LDPO），显式建模多级偏好；精炼评分阶段（RSP）用轻量评分模块实现候选与序列的深层交互。\n\n## 2. 相关工作\n\n### 2.1 生成式检索\n\nTIGER [23] 提出语义标识符（SID）和 seq2seq 模型。FORGE [9] 用协同信号优化 SID 并减少碰撞。HSTU [37] 采用层次序列转导单元。MTGR [10] 保留显式特征交叉。ETEGRec [18] 端到端学习 SID。部分工作引入强化学习 [4,7] 来对齐用户偏好。\n\n### 2.2 偏好对齐\n\nDPO [22] 通过成对损失直接优化偏好。mDPO [28] 扩展到多样本组对比。PFM [15] 用流匹配转换负样本。在推荐中，OneRec [7] 和 OneSearch [4] 也应用 DPO，但需额外奖励模型且仅用成对损失，无法捕捉推荐中固有的多层部分序关系。\n\n## 3. 方法概览\n\nRankGR 的完整训练流程如图 2 所示。首先通过 RQ-VAE 将物品多模态特征量化为多级语义标识符（SID）。训练时，IAP 阶段将多个不同偏好级别的目标物品拼接到历史序列后，通过修改注意力掩码防止互相干扰，并联合优化 NTP 和 LDPO 损失。RSP 阶段保留 IAP 输出的 top-$\\lambda$ 个码字，用注意力机制与历史隐藏状态交互，再用 MLP 与 sigmoid 输出精炼得分。\n\n<img src='https://arxiv.org/html/x2.png' alt='Figure 2: RankGR 训练框架总览' style='width:60%;'>\n\n图 2 展示了 RankGR 的完整训练流程：从左到右依次是 SID 生成、IAP 阶段的 LDPO 训练（含四层偏好信号），以及 RSP 阶段的评分模块。\n\n## 4. 方法细节\n\n### 4.1 语义标识符生成与基础 GR\n\n物品 $i$ 的特征 $\\mathbf{H}_i$ 经 RQ-VAE 量化为 $m$ 级码字 $\\{c_1^i, \\dots, c_m^i\\}$。第 $l$ 级码字通过残差量化得到：$c_l^i = \\arg\\min_{c \\in [1,m]} \\|\\mathbf{H}_l^i - q_c^{l}\\|$。GR 模型以历史 SID 序列为输入，用 NTP 损失训练：\n\n$$L_{\\text{NTP}} = \\frac{1}{N_u}\\sum_{j=1}^{N_u}\\sum_{t=1}^T\\sum_{k=1}^m -\\log P_{\\theta,\\tau}(c_k^{i^{(t)}} | x_{<t}^j, c_{<k}^{i^{(t)}}).$$\n\n### 4.2 初始评估阶段（IAP）与 LDPO\n\n为了在物品级别建模偏好，定义物品 $i^{(t)}$ 的得分为 $m$ 个码字概率的对数和：\n\n$$\\pi(i^{(t)}) = \\sum_{l=1}^m \\log p_l(c_l^{i^{(t)}}).$$\n\n将来自四个偏好级别（G4: 购买，G3: 点击，G2: 曝光未点击，G1: 伪曝光）的物品拼接到序列末尾，并修改注意力掩码（仅允许历史与同一目标内部的注意力）。LDPO 损失定义为逐级对比：\n\n$$L_{\\text{LDPO}} = -\\sum_{j=1}^3 \\sum_{k \\in G_{j+1}} \\log \\frac{e^{\\beta \\pi(k)}}{e^{\\beta \\pi(k)} + \\sum_{i \\in G_1 \\cup \\dots \\cup G_j} e^{\\beta \\pi(i)}}.$$\n\nIAP 总损失 $L_{\\text{IAP}} = L_{\\text{NTP}} + \\alpha L_{\\text{LDPO}}$，其中 $\\alpha$ 为超参数。\n\n### 4.3 精炼评分阶段（RSP）\n\nRSP 保留 IAP 预测的 top-$\\lambda_l$ 个码字作为候选集 $\\mathcal{C}_l$。每个候选码字的嵌入作为 query，与所有历史隐藏状态 $\\mathbf{H}$（含当前层隐藏状态）做注意力：\n\n$$\\tilde{h}_{l,\\tilde{c}} = \\text{Attention}(Q=\\text{emb}(\\tilde{c}), K=\\mathbf{H}, V=\\mathbf{H}).$$\n\n然后经 MLP 和 sigmoid 得到得分 $s_{l,\\tilde{c}} \\in (0,1)$。训练时使用二元交叉熵损失 $L_{\\text{BCE}}$。整体损失 $L = L_{\\text{BCE}} + L_{\\text{IAP}}$。\n\n### 4.4 推理过程\n\nIAP 生成候选码字，RSP 重新评分，最终物品得分为各层得分之和：\n\n$$s_T(\\tilde{c}_1,\\dots,\\tilde{c}_m) = \\sum_{l=1}^m \\log s_{l,\\tilde{c}_l}.$$\n\n## 5. 训练与部署优化\n\n为满足工业低延迟要求，RankGR 采用异步预计算架构：在用户请求早期触发预计算，与主流程并行执行 LLM 推理（60ms），结果存入 Redis；在线检索时直接从 Redis 读取。通过在线学习实现小时级模型更新。\n\n## 6. 实验设置\n\n数据集：Amazon Clothing_Shoes_and_Jewelry（252万用户、71万物品、1253万交互）和 Taobao（2亿用户、10亿物品、0.9万亿交互）。基线包括传统检索（YouTubeDNN、SASRec、Bert4Rec、Caser、NextItNet、CORE）和生成检索（HSTU、TIGER、FORGE）。使用 Qwen2.5-0.5B-Instruct 作为骨干，SID 基于 FORGE 生成。评估指标为 HR@K（点击和页面浏览）。\n\n## 7. 实验结果\n\n### 7.1 整体性能\n\n在 Taobao 数据集上，RankGR 在所有指标上显著超越基线。例如 Click HR@1000 达到 55.03%，比 FORGE（43.92%）提升 11pp。PV HR@1000 达 36.07%，比 FORGE（28.10%）提升 8pp。在 Amazon 上，HR@100 达 4.68%，优于 FORGE（4.56%）。\n\n| 方法 | Click HR@20 | Click HR@1000 | PV HR@20 | PV HR@1000 |\n|------|------------|--------------|----------|------------|\n| FORGE | 9.54% | 43.92% | 2.37% | 28.10% |\n| RankGR | 12.28% | 55.03% | 2.87% | 36.07% |\n\n（Amazon 数据集结果类似，RankGR 在 HR@20 达 2.27%，FORGE 为 2.12%）\n\n### 7.2 消融实验\n\n移除 IAP 导致 Click HR@20 下降 18.28%；移除 RSP 导致 HR@20 下降 10.44%；两者都移除则下降 22.34%。表明 IAP 和 RSP 互补。\n\n### 7.3 深度分析\n\n- 保留码字数：随着 $\\lambda_2$ 从 60 增加到 1400，HR@1000 持续提升，表明充分候选空间的重要性。\n- 超参数 $\\alpha$：当 $\\alpha=1$ 时性能最佳；过大则 LDPO 过度主导，损害 NTP 生成能力。\n\n### 7.4 线上 A/B 测试\n\n在淘宝“猜你喜欢”部署（流量 5%），RankGR 相比于基线 GR 模型（无 IAP 和 RSP）使得 IPV 提升 1.08%，交易数提升 0.57%，且筛选了 49.88% 的曝光。\n\n## 8. 创新点与亮点\n\n1. 首次在生成式检索中引入列表直接偏好优化（LDPO），无需额外奖励模型。\n2. 双阶段架构：IAP 做粗粒度偏好对齐，RSP 做细粒度交互评分。\n3. 工业级部署方案，异步预计算+流式训练，实现近万 QPS 的实时推理。\n\n## 9. 局限性与未来工作\n\n论文未深入讨论当 SID 码本较大时 IAP 的候选剪枝策略对召回率的影响；LDPO 的层级定义依赖人工规则；RSP 的注意力计算与 $\\lambda$ 相关，可能成为瓶颈。未来可探索自适应层级定义或端到端 SID 学习。\n\n## 10. 与相关工作的对比\n\n与 TIGER/FORGE 相比，RankGR 额外建模了偏好部分序和深层交互；与 OneRec 等基于 DPO 的方法相比，RankGR 使用列表损失而非配对损失，且不依赖单独奖励模型。\n\n## 11. 评价与启示\n\nRankGR 展示了将偏好对齐引入生成式检索的有效性，且在工业场景验证了可行性。其异步部署架构为 LLM 在推荐系统落地提供了参考。LDPO 的列表形式比 DPO 更贴合推荐中的多级反馈。",
+  "figures": [
+    {
+      "label": "Figure 1",
+      "caption": "Figure 1. (a) Multi-stage architecture in modern recommender systems. (b) A brief diagram of generative retrieval.",
+      "src": "https://arxiv.org/html/x1.png"
+    },
+    {
+      "label": "Figure 2",
+      "caption": "Figure 2. Overview of the training of RankGR. (a) The generation process of semantic identifiers. (b) The initial assessment phase aims to capture both the sequential pattern and the partial order relations. (c) The refined scoring phase to provide a more accurate prediction of those candidates from the initial assesment.",
+      "src": "https://arxiv.org/html/x2.png"
+    },
+    {
+      "label": "Figure 3",
+      "caption": "Figure 3. Detailed deployment process of RankGR.",
+      "src": "https://arxiv.org/html/x3.png"
+    },
+    {
+      "label": "Figure 4",
+      "caption": "Figure 4. Performance of RankGR in terms of HR@1000 with respect to the number of retaining codewords for RSP.",
+      "src": "https://arxiv.org/html/x4.png"
+    },
+    {
+      "label": "Figure 5",
+      "caption": "Figure 5. Performance of RankGR in terms of HR@1000 on the Taobao dataset with respect to the hyperparameter α \\alpha .",
+      "src": "https://arxiv.org/html/x5.png"
+    }
+  ],
+  "figures_source": "arxiv_html",
+  "summary_zh": "RankGR 通过列表直接偏好优化排序增强生成式检索，在淘宝首页推荐取得显著线上提升。",
+  "authors": "Kairui Fu, Changfa Wu, Kun Yuan, Binbin Cao, Dunxian Huang, Yuliang Yan, Junjun Zheng, Jianning Zhang, Silu Zhou, Jian Wu, Kun Kuang",
+  "org_display": "Zhejiang University, Alibaba Group",
+  "industry_orgs": "Alibaba Group",
+  "affiliation_type": "collaboration",
+  "is_industrial_paper": true,
+  "is_ab_test": true
+}
