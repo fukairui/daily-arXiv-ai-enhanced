@@ -141,7 +141,12 @@ def _parse_html_figures(html: str, base_url: str):
 
 # ===== 方案 B：PyMuPDF 抽取页内嵌入图片 =====
 def fallback_pdf_figure_screenshots(pdf_bytes: bytes, paper_id: str, data_dir: str):
-    """方案 A 失败时，从 PDF 里抽取**嵌入的位图**（不是整页截图），导出为 PNG。
+    """方案 A 失败时，从 PDF 里以 **300 DPI** 渲染出每个 figure 区域。
+    思路（兼顾矢量图与位图）：
+      - 用 page.get_image_info() 找位图块；
+      - 用 page.get_drawings() 聚类找矢量绘图块；
+      - 把同一 figure 的位图/矢量合并成一个 bbox，外扩 10pt 包住 caption；
+      - 用 page.get_pixmap(clip=bbox, dpi=300) 渲染成高清 PNG。
     每张图带上所在页码，便于 LLM 关联 caption。
     返回 list of {label, caption, src, kind}。
     """
@@ -154,65 +159,147 @@ def fallback_pdf_figure_screenshots(pdf_bytes: bytes, paper_id: str, data_dir: s
         print(f"fallback open pdf failed: {e}", file=sys.stderr)
         return figures
 
-    # 记录每个 xref 已写盘的文件名，避免一张图在多页出现时重复保存
-    saved_xrefs = {}
     fig_index = 0
-    # 每页找一下页面附近的 "Figure N: ..." caption，关联给这一页的图（粗匹配，够用即可）
+    DPI = 300
+
+    def _bbox_union(rects):
+        if not rects:
+            return None
+        x0 = min(r[0] for r in rects)
+        y0 = min(r[1] for r in rects)
+        x1 = max(r[2] for r in rects)
+        y1 = max(r[3] for r in rects)
+        return [x0, y0, x1, y1]
+
+    def _bbox_overlap(a, b):
+        return not (a[2] < b[0] or b[2] < a[0] or a[3] < b[1] or b[3] < a[1])
+
+    def _bbox_close(a, b, tol=12):
+        # 矩形 a,b 距离小于 tol 视为属于同一组（用于聚合矢量绘图）
+        ax_c = (a[0] + a[2]) / 2; ay_c = (a[1] + a[3]) / 2
+        bx_c = (b[0] + b[2]) / 2; by_c = (b[1] + b[3]) / 2
+        if _bbox_overlap(a, b):
+            return True
+        return abs(ax_c - bx_c) < (a[2] - a[0] + b[2] - b[0]) / 2 + tol and \
+               abs(ay_c - by_c) < (a[3] - a[1] + b[3] - b[1]) / 2 + tol
+
+    def _cluster_rects(rects):
+        clusters = []
+        for r in rects:
+            placed = False
+            for c in clusters:
+                if any(_bbox_close(r, x) for x in c):
+                    c.append(r)
+                    placed = True
+                    break
+            if not placed:
+                clusters.append([r])
+        return [_bbox_union(c) for c in clusters]
+
     for pidx, page in enumerate(doc):
+        page_rect = page.rect
+        page_w, page_h = page_rect.width, page_rect.height
+
+        # 1) 收集本页位图 bbox
+        img_rects = []
+        try:
+            for info in page.get_image_info():
+                bb = info.get("bbox")
+                if not bb:
+                    continue
+                w = bb[2] - bb[0]; h = bb[3] - bb[1]
+                if w < 60 or h < 40:
+                    continue  # 过小：装饰、icon
+                img_rects.append([bb[0], bb[1], bb[2], bb[3]])
+        except Exception:
+            pass
+
+        # 2) 收集本页矢量绘图 bbox（聚合相邻路径）
+        try:
+            drawings = page.get_drawings() or []
+        except Exception:
+            drawings = []
+        draw_rects = []
+        for d in drawings:
+            r = d.get("rect")
+            if not r:
+                continue
+            try:
+                rr = [float(r.x0), float(r.y0), float(r.x1), float(r.y1)]
+            except Exception:
+                continue
+            w = rr[2] - rr[0]; h = rr[3] - rr[1]
+            if w < 80 or h < 50:
+                continue
+            # 跳过疑似页眉/页脚的细长水平线
+            if h < 6 and w > page_w * 0.3:
+                continue
+            draw_rects.append(rr)
+        clustered_draws = _cluster_rects(draw_rects)
+        # 矢量聚合块需要面积达到一定大小才算 figure
+        clustered_draws = [r for r in clustered_draws if (r[2] - r[0]) * (r[3] - r[1]) > 6000]
+
+        # 3) 合并位图 + 矢量块（bbox 重叠时合并）
+        all_blocks = img_rects + clustered_draws
+        merged = []
+        used = [False] * len(all_blocks)
+        for i, b in enumerate(all_blocks):
+            if used[i]:
+                continue
+            cur = list(b)
+            used[i] = True
+            for j in range(i + 1, len(all_blocks)):
+                if used[j]:
+                    continue
+                if _bbox_overlap(cur, all_blocks[j]):
+                    cur = _bbox_union([cur, all_blocks[j]])
+                    used[j] = True
+            merged.append(cur)
+
+        # 4) caption 关联
         page_text = ""
         try:
             page_text = page.get_text() or ""
         except Exception:
             pass
-        # 粗略找出本页所有 "Figure N: ..." / "Fig. N: ..." 行
         cap_matches = re.findall(
             r"((?:Figure|Fig\.)\s*\d+[:.\u3002]?\s*[^\n]{0,300})",
             page_text,
         )
         cap_iter = iter(cap_matches)
 
-        try:
-            imgs = page.get_images(full=True)
-        except Exception:
-            imgs = []
-        for img in imgs:
-            xref = img[0]
-            # 过滤过小的图（图标/装饰），width/height 在 img[2:4]
-            try:
-                w, h = int(img[2]), int(img[3])
-            except Exception:
-                w, h = 0, 0
-            if w < 200 or h < 120:
-                continue
-            if xref in saved_xrefs:
-                fname = saved_xrefs[xref]
-            else:
-                try:
-                    info = doc.extract_image(xref)
-                except Exception as e:
-                    print(f"extract_image xref={xref} failed: {e}", file=sys.stderr)
-                    continue
-                ext = info.get("ext") or "png"
-                fname = f"fig-p{pidx + 1:02d}-{xref:04d}.{ext}"
-                fpath = os.path.join(out_dir, fname)
-                try:
-                    with open(fpath, "wb") as f:
-                        f.write(info.get("image") or b"")
-                except Exception as e:
-                    print(f"write {fpath} failed: {e}", file=sys.stderr)
-                    continue
-                saved_xrefs[xref] = fname
+        for bbox in merged:
+            # 外扩一点点以包住坐标轴/标题/caption（不超过页面边界）
+            pad = 8
+            x0 = max(0, bbox[0] - pad)
+            y0 = max(0, bbox[1] - pad)
+            x1 = min(page_w, bbox[2] + pad)
+            y1 = min(page_h, bbox[3] + pad + 18)  # 下方多留 18pt 包住 figure 标题
 
-            fig_index += 1
+            # 过滤近全页面的 bbox（说明聚合过头，已经把整页囊括进来）
+            area_ratio = ((x1 - x0) * (y1 - y0)) / (page_w * page_h + 1)
+            if area_ratio > 0.85:
+                continue
+
+            try:
+                clip = fitz.Rect(x0, y0, x1, y1)
+                pix = page.get_pixmap(clip=clip, dpi=DPI, alpha=False)
+                fig_index += 1
+                fname = f"fig-p{pidx + 1:02d}-{fig_index:02d}.png"
+                fpath = os.path.join(out_dir, fname)
+                pix.save(fpath)
+            except Exception as e:
+                print(f"render fig {pidx + 1}/{fig_index} failed: {e}", file=sys.stderr)
+                continue
+
             caption = next(cap_iter, "").strip()
             rel = f"data/figures/{paper_id}/{fname}"
             figures.append({
-                "label": f"Embedded image on page {pidx + 1}" + (f" (likely {caption[:60]})" if caption else ""),
-                "caption": caption or f"Image embedded on page {pidx + 1} of the PDF; could be a figure/table.",
+                "label": f"Figure on page {pidx + 1}" + (f" ({caption[:60]})" if caption else ""),
+                "caption": caption or f"Figure-like region on page {pidx + 1} of the PDF.",
                 "src": _figures_public_url(paper_id, rel),
-                "kind": "pdf_embedded_image",
+                "kind": "pdf_clip_300dpi",
             })
-            # 一篇论文上限 12 张，避免极端论文塞太多
             if fig_index >= 12:
                 doc.close()
                 return figures
