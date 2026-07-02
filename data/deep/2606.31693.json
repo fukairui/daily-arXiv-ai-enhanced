@@ -1,0 +1,96 @@
+{
+  "id": "2606.31693",
+  "title": "ShopX: A Foundation Model for Intent-to-Item Fulfillment in Agentic Shopping",
+  "model": "deepseek-reasoner",
+  "language": "Chinese",
+  "analyzed_at": "2026-07-02T08:12:27.833624+00:00",
+  "tags": [
+    "Industrial Recommender Systems",
+    "LLM as Rec",
+    "Agent"
+  ],
+  "new_tags": [],
+  "markdown": "## 1. 核心问题\n\n当前AI电商购物正从传统的浏览式页面转向由大语言模型（LLM）代理编排的意图驱动体验。一种常见的架构是“工具中介”（tool-mediated）：LLM负责意图理解、查询重写和对话管理，但商品空间的执行（检索、排序、推荐）依赖外部工具。这种分离导致丰富的上下文在通过窄接口传递给工具时发生信息损失（interface loss）。论文旨在解决这一瓶颈，提出**模型原生**（model-native）的意图到商品履行框架ShopX，让同一个基础模型直接理解意图、规划执行、操作语义ID（SID）并生成接地响应，从而减少工具交界处的信息压缩与碎片化。\n\n## 2. 相关工作\n\n相关研究可分为两个脉络：\n- **LLM驱动的推荐系统**：如Chat-REC、InteRecAgent、RecMind等，属于工具中介范式，LLM负责调用外部检索/排序工具。这些系统受限于工具接口的窄带宽，多轮偏好与反馈难以被有效传递。\n- **生成式推荐（Generative Recommendation）**：利用语义ID（SID）将推荐视为自回归生成任务，如TIGER、P5、OneRec系列。但现有生成式推荐主要针对候选检索优化，并未覆盖完整的电商助理工作流（如动作选择、商品捆绑、接地解释、状态更新）。\n\nShopX结合两者优势，将SID作为模型原生的商品操作接口，并设计完整的训练配方使LLM获得端到端的履行能力，同时保持通用语言与指令遵循能力。\n\n## 3. 方法概览\n\nShopX框架由两个核心部分组成：**ShopX模型**与**轻量级服务外壳（Harness）**。Harness定义了模型面对的动作协议（Plan、Execute、Fulfill、Update）并提供上下文访问、目录接地、状态管理三个支撑面。ShopX模型在此协议下自主完成意图理解、执行规划、SID原生商品操作（如Beam-search检索、列表重排序、商品捆绑）、接地响应生成以及状态更新信号提取。\n\n<img src=\"https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.31693/fig-p01-01.png\" alt=\"图1: ShopX框架（左）与雷达图结果（右）\" style=\"width:80%;\">\n\n*图1左半部分展示了ShopX作为履行核心，通过Harness支撑上下文、目录和状态，执行SID原生操作；右半部分展示了在淘宝复杂/模糊购物任务上，ShopX框架相比工具中介基线在8项指标上的整体优势。*\n\n## 4. 方法细节\n\n### 4.1 语义ID（SID）设计\n\nSID需满足两个设计目标：**可恢复性**（从SID能还原商品语义）和**LLM可操作性**（作为自回归生成目标稳定且易学）。论文重新设计商品表示学习：\n- 采用Qwen3-VL-Embedding-2B作为骨干，融合图像、属性、标题等多模态输入。\n- 使用**等效商品监督**（Equivalent-Product）替代协作信号的正样本关系，并加入同类别硬负样本，配合软目标InfoNCE损失。\n- 输出结构分为单向量（SV）与多向量（MV）两种，MV增加多个局部嵌入以保留精细语义。\n\nSID分词采用**混合全局-局部编码**：全局前缀通过残差量化（RQ-VAE）对全局嵌入编码，提供稳定的自回归路径；局部后缀通过向量量化（VQ）对各局部嵌入编码，增加可恢复的语义容量。最终采用G2+L4（2个全局层级+4个局部层级）的配置。\n\n### 4.2 持续预训练（CPT）\n\n分为两个阶段：\n1. **SID令牌对齐**：仅训练新增的SID嵌入层，冻结原始骨干，在200B对齐令牌上训练1个epoch，使模型学会SID与自然语言文本之间的双向映射。\n2. **领域持续预训练**：混合约70B购物域令牌和35B通用重放令牌（2:1比例），数据包括目录-SID接地、意图/行为-商品接地、用户偏好理解三类。全参数更新，上下文长度20480，学习率5e-5。\n\n### 4.3 后训练（Post-Training）\n\n后训练目标是让模型遵循ShopX动作协议并执行精准的商品空间操作。面临能力跷跷板问题：强化SID预测可能损伤通用语言能力。论文提出**多教师在线策略蒸馏+强化学习联合训练（MOPD+RL）**，将训练样本按任务族路由到不同教师（领域教师、通用教师、自教师），在线收集学生rollout，通过rubric-based奖励与教师偏好联合优化。\n\n<img src=\"https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.31693/fig-p17-07.png\" alt=\"图7: ShopX训练流水线\" style=\"width:80%;\">\n\n*图7展示了从通用LLM出发，经过SID对齐、领域CPT、履行SFT、教师SFT，再到多教师OPD+RL联合后训练的完整流程。*\n\n## 5. 训练与部署优化\n\n训练阶段的关键优化：\n- **SID验证协议**：在构建完整训练前，通过轻量级对齐+微调测试不同SID版本的LLM可学习性，双向检查语言→SID和SID→语言对齐质量。\n- **CPT混合比例消融**：通过2:1（域:通用）比例被选为最优，避免灾难性遗忘。\n- **后训练任务路由**：MOPD阶段根据任务类型分配教师，稳定多技能学习。\n\n部署方面，服务Harness负责上下文装配、目录证据查询、状态读写，模型只负责推理与动作填充，实现灵活的模型原生服务模式（意图履行、上下文个性化、有状态多轮履行三种模式）。\n\n## 6. 实验设置\n\n实验在淘宝匿名生产日志、用户上下文和目录快照（约12亿商品）上构建基准。\n- **框架级评估**：279个单任务 + 80个多任务轨迹，与ChatRec、InteRecAgent、RecMind等工具中介基线对比。使用Claude Sonnet 4.6作为rubric-based LLM Judge打分，输出8项0-100指标。\n- **能力分解评估**：分为购物语义、上下文证据提取、文本化推荐/搜索、商品空间履行四大块，使用专用诊断集。\n- **消融实验**：SID设计、CPT混合比例、后训练策略。\n\n## 7. 实验结果\n\n### 7.1 框架级结果\n\nShopX在8项指标上全面优于工具中介基线。以雷达图数值为例（图1右）：\n\n| 指标 | ShopX | 最佳基线（工具中介） |\n|------|-------|---------------------|\n| 意图满足（Intent Fulfillment） | ~75% | ~55% |\n| 商品精确度（Item Precision） | ~97% | ~88% |\n| 排序质量（Ranking Quality） | ~97% | ~88% |\n| 目录覆盖（Category Coverage） | ~90% | ~75% |\n| 个性化（Personalization） | ~68% | ~58% |\n| 约束接地（Constraint Grounding） | ~82% | ~70% |\n| 反馈适应（Feedback Adaptation） | ~74% | ~54% |\n| 跨轮引用（Cross-turn Reference） | ~72% | ~38% |\n\n*注：数值基于图1雷达图提取的近似范围，论文具体数值可能略有差异。*\n\n### 7.2 能力分解结果\n\n在购物语义诊断中，ShopX优于或接近通用LLM（如GPT、Gemini）在文本化推荐/搜索上的准确率；在商品空间履行（检索、排序、交互式生成）上大幅领先，验证了SID原生操作的有效性。\n\n### 7.3 消融实验\n\n- **SID设计**：G2+L4混合SID优于长全局SID或仅全局SID，在恢复性（ROUGE-L）和可操作性（HitRate@64）上取得更好平衡。\n- **CPT混合比例**：2:1域-通用令牌比兼顾领域适应与通用能力保持。\n- **后训练策略**：MOPD+RL相比单独SFT或单独DPO在8项框架指标上均有提升，尤其在多轮反馈适应和跨轮引用上。\n\n## 8. 创新点与亮点\n\n1. **模型原生履行范式**：提出将意图理解、执行规划、SID操作统一到单一基础模型，替代工具中介架构，减少接口损失。\n2. **可恢复且可操作的SID设计**：混合全局-局部编码，使SID既便于LLM生成又保留丰富语义，通过轻量级验证协议选择最佳配置。\n3. **多教师在线策略蒸馏+RL后训练**：通过任务路由和在线收集，解决多技能联合训练中的跷跷板问题，在保持通用能力的同时大幅提升商品空间操作质量。\n4. **系统级评估框架**：构建包含8维度指标的系统级评估协议，量化框架整体行为而非仅模型端指标。\n\n## 9. 局限性与未来工作\n\n1. **规模与泛化**：实验基于淘宝生态，SID依赖于平台目录与用户行为数据，迁移到其他平台需重建SID。\n2. **多语言与文化适配**：仅使用中文数据，对英语及其他语言环境下购物意图的泛化能力尚未验证。\n3. **实时更新**：SID与目录快照绑定，商品库变化时需要重新编码，期待更动态的增量更新方案。\n4. **复杂多模态推理**：虽然模型使用了多模态表示，但推理过程中主要依赖文本和SID，未来可探索直接基于图像/视频的商品理解。\n\n## 10. 与相关工作的对比\n\n| 维度 | 工具中介（ChatRec等） | 生成式推荐（OneRec等） | ShopX |\n|------|-----------------------|----------------------|-------|\n| 意图理解 | LLM独立处理，工具接口窄 | 仅候选检索 | 模型原生全流程 |\n| 多轮反馈传递 | 容易丢失或压缩 | 不支持 | 通过状态管理保留 |\n| 商品操作多样性 | 限于检索+排序API | 仅生成SID列表 | 检索、重排、捆绑、比较、交互式生成 |\n| 通用语言保持 | 较好（LLM工具调用） | 可能退化 | 通过CPT重放+后训练保护 |\n| 端到端可微 | 否 | 是（生成角度） | 是（模型原生） |\n\nShopX本质是将生成式推荐从“候选生成”升级为“完整履行代理”，同时保持了工具中介系统的交互灵活性。\n\n## 11. 评价与启示\n\n该工作提出了一种有前途的范式转变：让电商AI助手直接“生活”在商品空间（通过SID），而非通过外部工具间接操作。这消除了传统管道中的多处信号损失。尤其是多教师在线蒸馏的工程实用性强，有效缓解了多技能冲突。实验设计系统且完备（框架级+能力级+消融）。未来如果能在跨平台迁移、动态目录更新、多语言场景上进一步扩展，将更具通用价值。这项工作对工业电商推荐系统和对话式购物助手的架构设计有重要参考意义。",
+  "figures": [
+    {
+      "label": "Figure on page 1 (Figure 1 | (Left) ShopX is a SID-aware foundation model that)",
+      "caption": "Figure 1 | (Left) ShopX is a SID-aware foundation model that serves as the fulfillment core, planning",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.31693/fig-p01-01.png",
+      "kind": "pdf_clip_300dpi"
+    },
+    {
+      "label": "Figure on page 5 (Figure 2 | Tool-mediated versus model-native fulfillment. In)",
+      "caption": "Figure 2 | Tool-mediated versus model-native fulfillment. In a two-turn shopping scenario,",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.31693/fig-p05-02.png",
+      "kind": "pdf_clip_300dpi"
+    },
+    {
+      "label": "Figure on page 7 (Figure 3 | The model-native serving framework of ShopX. The )",
+      "caption": "Figure 3 | The model-native serving framework of ShopX. The ShopX model serves as the",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.31693/fig-p07-03.png",
+      "kind": "pdf_clip_300dpi"
+    },
+    {
+      "label": "Figure on page 10 (Figure 4 | Framework-level evaluation. Complete ShopX and to)",
+      "caption": "Figure 4 | Framework-level evaluation. Complete ShopX and tool-mediated serving frameworks",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.31693/fig-p10-04.png",
+      "kind": "pdf_clip_300dpi"
+    },
+    {
+      "label": "Figure on page 12 (Figure 5 | Shopping capability diagnostics. Representative i)",
+      "caption": "Figure 5 | Shopping capability diagnostics. Representative input–output patterns and primary",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.31693/fig-p12-05.png",
+      "kind": "pdf_clip_300dpi"
+    },
+    {
+      "label": "Figure on page 13 (Figure 6 | Semantic ID architecture for bridging language an)",
+      "caption": "Figure 6 | Semantic ID architecture for bridging language and item space. Multimodal item",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.31693/fig-p13-06.png",
+      "kind": "pdf_clip_300dpi"
+    },
+    {
+      "label": "Figure on page 17 (Figure 7 | Training pipeline for ShopX. The recipe starts fr)",
+      "caption": "Figure 7 | Training pipeline for ShopX. The recipe starts from a general LLM and proceeds",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.31693/fig-p17-07.png",
+      "kind": "pdf_clip_300dpi"
+    },
+    {
+      "label": "Figure on page 21 (Figure 8 | Task routing in the OPD–RL stage. The OPD–RL stag)",
+      "caption": "Figure 8 | Task routing in the OPD–RL stage. The OPD–RL stage assigns training examples to",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.31693/fig-p21-08.png",
+      "kind": "pdf_clip_300dpi"
+    },
+    {
+      "label": "Figure on page 30 (Figure 9 averages these three general columns together with )",
+      "caption": "Figure 9 averages these three general columns together with GSM8K. Under",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.31693/fig-p30-09.png",
+      "kind": "pdf_clip_300dpi"
+    },
+    {
+      "label": "Figure on page 48 (Figure 10 | Qualitative fulfillment trace comparison, Case 1)",
+      "caption": "Figure 10 | Qualitative fulfillment trace comparison, Case 1. Although this is a multi-turn",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.31693/fig-p48-10.png",
+      "kind": "pdf_clip_300dpi"
+    },
+    {
+      "label": "Figure on page 49 (Figure 11 | Qualitative fulfillment trace comparison, Case 2)",
+      "caption": "Figure 11 | Qualitative fulfillment trace comparison, Case 2. Although this is a multi-turn",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.31693/fig-p49-11.png",
+      "kind": "pdf_clip_300dpi"
+    },
+    {
+      "label": "Figure on page 50 (Figure 12 | Qualitative fulfillment trace comparison, Case 3)",
+      "caption": "Figure 12 | Qualitative fulfillment trace comparison, Case 3. The case title, intent summary,",
+      "src": "https://raw.githubusercontent.com/fukairui/daily-arXiv-ai-enhanced/data/data/figures/2606.31693/fig-p50-12.png",
+      "kind": "pdf_clip_300dpi"
+    }
+  ],
+  "figures_source": "pdf_screenshot",
+  "summary_zh": "ShopX提出模型原生（model-native）的意图到商品履行框架，使用语义ID（SID）作为语言与商品空间的桥梁，通过持续预训练与多教师在线策略蒸馏+强化学习联合后训练，统一了购物助手场景中的意图理解、执行规划与SID原生操作，在淘宝数据上显著优于工具中介的LLM agent方案。",
+  "authors": "ShopX Team",
+  "org_display": "Alibaba Taobao & Tmall Group",
+  "industry_orgs": "Alibaba Taobao & Tmall Group",
+  "affiliation_type": "industry",
+  "is_industrial_paper": true,
+  "is_ab_test": false
+}
