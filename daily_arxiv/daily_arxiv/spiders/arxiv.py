@@ -48,11 +48,16 @@ class ArxivSpider(scrapy.Spider):
                 continue
             
             # 提取论文分类信息 - 在subjects部分
-            subjects_text = paper_dd.css(".list-subjects .primary-subject::text").get()
+            # 需要读取整段 .list-subjects 文本（含主分类与次要分类），
+            # 否则 cross-list 论文（主分类不在目标集合，但次要分类命中）会被漏掉
+            subjects_parts = paper_dd.css(".list-subjects *::text").getall()
+            subjects_text = " ".join(t.strip() for t in subjects_parts if t and t.strip())
             if not subjects_text:
-                # 如果找不到主分类，尝试其他方式获取分类
-                subjects_text = paper_dd.css(".list-subjects::text").get()
-            
+                # 兜底：直接抓 .list-subjects 的文本节点
+                subjects_text = " ".join(
+                    t.strip() for t in paper_dd.css(".list-subjects::text").getall() if t and t.strip()
+                )
+
             if subjects_text:
                 # 解析分类信息，通常格式如 "Computer Vision and Pattern Recognition (cs.CV)"
                 # 提取括号中的分类代码
