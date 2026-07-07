@@ -1,0 +1,79 @@
+{
+  "id": "2510.07784",
+  "title": "PLUM: Adapting Pre-trained Language Models for Industrial-scale Generative Recommendations",
+  "model": "deepseek-reasoner",
+  "language": "Chinese",
+  "analyzed_at": "2026-07-07T09:57:03.915623+00:00",
+  "tags": [
+    "Industrial Recommender Systems",
+    "LLM as Rec",
+    "Task-space Scaling"
+  ],
+  "new_tags": [],
+  "markdown": "## 1. 核心问题\n\n传统推荐系统依赖大规模嵌入表（Large Embedding Models, LEMs），将大部分参数集中于物品ID嵌入，导致神经网络深度受限且难以从大语言模型（LLMs）的序列建模与知识迁移中获益。PLUM旨在解决两大挑战：\n- **域差距**：LLM未预训练于目标推荐领域的行为数据与物品语料。\n- **缩放瓶颈**：LEM的嵌入表难以扩展，训练成本高昂。\n\nPLUM提出通过**语义ID（Semantic IDs, SIDs）** 替代传统ID嵌入，并利用连续预训练（CPT）和任务专精微调，使预训练LLM适应工业级生成式检索。\n\n## 2. 相关工作\n\n论文将相关研究归为三类：\n- **序列推荐**：使用Transformer等架构建模用户历史与特征交互，但仍依赖大规模嵌入表（如[9,13]）。\n- **语义ID与量化**：RQ-VAE等将物品表示为离散令牌序列（如TIGER[23]），后续工作引入多模态融合与协同信号。PLUM增强之处：多分辨率码本、渐进掩码、共现对比正则化。\n- **生成式检索与对齐**：将检索转为seq2seq生成SID的任务（如OneRec[40]）。PLUM强调与LLM的对齐及CPT的作用。\n\n## 3. 方法概览\n\nPLUM框架包含三个阶段：\n\n1. **物品标记化**：为每个视频生成SID（改进的RQ-VAE，称SID-v2）。\n2. **连续预训练（CPT）**：扩展LLM词表加入SID令牌，在领域数据（用户行为序列+视频元数据）上继续预训练，使SID令牌与文本语义对齐。\n3. **任务专精微调（SFT）**：在生成式检索任务上微调，模型根据用户上下文自回归生成推荐物品的SID序列。\n\n<img src=\"https://arxiv.org/html/2510.07784v1/x1.png\" alt=\"Figure 1: SID模型概览\" style=\"width:60%;\">\n\n*图1：SID-v2模型架构。输入多模态嵌入（如视频视觉、文本、音频），经MLP编码为统一表示，通过残差量化器生成SID令牌序列，训练时同时优化重构损失与共现对比损失。*\n\n## 4. 方法细节\n\n### 4.1 语义ID（SID-v2）\n\n基于TIGER的RQ-VAE，提出了以下改进：\n\n- **多模态融合表示**：接受多种异构嵌入 {x_m}，每个通过编码器 E_m 映射到隐向量 z_m，拼接后投影为统一编码 z。\n- **多分辨率码本**：不同量化层级采用不同的码本大小（第l层码本容量为 2048 / 2^{l-1}），更紧凑高效。\n- **渐进掩码**：在训练时随机选择前 r 个码本层级完整参与，后续层级被掩码，强制层级间的层次性。\n- **共现对比正则化**：引入对比损失 L_contrast，拉近用户行为中频繁共现的视频的SID表示，推远不共现的：\n\n$$\\mathcal{L}_{\\text{con}} = - \\sum_{i=1}^{2N_b} \\frac{\\exp(\\text{sim}(p_i, p_i^+))}{\\sum_{j=1}^{2N_b} \\exp(\\text{sim}(p_i, p_j))}$$\n\n总训练损失：$\\mathcal{L} = \\mathcal{L}_{\\text{recon}} + \\mathcal{L}_{\\text{rq}} + \\mathcal{L}_{\\text{con}}$，其中 $\\mathcal{L}_{\\text{recon}}$ 为多模态嵌入重构MSE，$\\mathcal{L}_{\\text{rq}}$ 为标准RQ-VAE量化损失。\n\n### 4.2 连续预训练（CPT）\n\n将SID令牌加入LLM词表，在混合数据集上训练：\n- 用户行为数据（50%）：形如 `<sid_1> <channel_name> <watch_ratio> ... || <sid_n>`。\n- 视频元数据语料（50%）：SID+标题、描述、ASR字幕等。\n\n训练260B tokens，LLM初始化为Gemini-1.5 MoE。CPT后模型展现出对SID令牌的零样本/少样本理解能力（见附录A.2）。\n\n### 4.3 生成式检索微调（SFT）\n\n输入构造为“watch history | user features | context video features”，使用自回归最大似然目标优化：\n\n$$\\mathcal{L}_{\\text{SFT}} = - \\sum_{t=1}^L r(\\text{user}, v_{\\text{click}}) \\cdot \\log P(\\text{sid}_t | \\text{Context}_{\\text{user}}, \\text{History}_{\\text{user}}, \\text{sid}_{<t})$$\n\n其中 $r$ 为自定义奖励权重，实际训练中采用基于奖励的采样与等权损失。推理时使用beam search解码多个候选SID序列，映射回实际视频。幻觉率低于5%。\n\n## 5. 训练与部署优化\n\n- **数据效率**：PLUM模型每天约2.5亿训练样本，而LEM需数十亿。\n- **训练成本**：900M MoE的训练FLOPs < LEM的0.55×。\n- **架构**：采用Gemini-1.5 MoE变体，900M激活参数（总计4.2B），TPU v6e集群（1024块）训练。\n- **在线服务**：通过beam search解码，同时支持长视频（LFV）和短视频（Shorts）检索。\n\n## 6. 实验设置\n\n### 6.1 生成式检索性能\n\n对比模型：\n- PLUM：900M MoE，从Gemini-1.5初始化，CPT+ SFT。\n- 基线LEM：生产级Transformer，但99.6%参数为嵌入表，0.4%为神经网络。\n\n数据集：YouTube大规模内部数据，评估指标包括有效词表大小（覆盖95%曝光的唯一视频数）、CTR、观看时长/播放比率（WT/View, WF/View）。\n\n### 6.2 SID消融实验\n\n对比SID-v1（原始RQ-VAE）与SID-v2（多模态+多分辨率+对比正则化），并消融各组件。\n\n### 6.3 CPT影响\n\n设计2×2消融：有无LLM初始化 × 有无CPT，共R1/R2/CR1/CR2四种配置，比较8天后的Recall@10。\n\n### 6.4 缩放律研究\n\n使用四种MoE尺寸（110M/370M/900M/3B激活参数），在固定训练资源下观察损失与Recall随计算量的变化。\n\n## 7. 实验结果\n\n### 7.1 生成式检索vs LEM\n\n| 指标         | LFV (比值) | Shorts (比值) |\n|--------------|------------|---------------|\n| 有效词表大小 | 2.60×      | 13.24×        |\n| CTR          | 1.42×      | 1.33×         |\n| WT/View      | 0.72×      | 1.13×         |\n| WF/View      | 1.32×      | 1.03×         |\n\n在线A/B实验（额外增加PLUM候选集，对比LEM+同等增加）：\n\n| 指标         | LFV变化  | Shorts变化 |\n|--------------|----------|------------|\n| 活跃用户数   | +0.07%   | +0.28%     |\n| Panel CTR    | +0.76%   | +4.96%     |\n| 观看次数     | +0.80%   | +0.39%     |\n| 用户满意度   | +0.06%   | +0.39%     |\n\nPLUM在有效覆盖与CTR上显著优于LEM，在线指标正向提升。\n\n### 7.2 SID消融结果\n\n| 模型变体          | SID唯一率 | VID Recall@10 |\n|-------------------|-----------|---------------|\n| SID-v1 (基线)     | 94.0%     | 12.3%         |\n| SID-v2 (完全)     | 96.7%     | 14.4%         |\n| 消融多分辨率码本  | 94.8%     | 13.2%         |\n| 消融多模态嵌入    | 96.9%     | 12.8%         |\n| 消融共现对比      | 91.8%     | 12.6%         |\n\n所有改进均带来提升，共现对比正则化对唯一率和召回影响最大。\n\n### 7.3 CPT重要性\n\n| 模型   | LLM初始 | CPT | 8th-day Recall@10 |\n|--------|----------|-----|-------------------|\n| R1     | 否       | 否  | 0.19              |\n| R2     | 是       | 否  | 0.23              |\n| CR1    | 否       | 是  | 0.27              |\n| CR2    | 是       | 是  | 0.28              |\n\nCPT带来约+0.04~0.05的Recall提升；LLM初始化额外贡献约+0.01~0.04。\n\n<img src=\"https://arxiv.org/html/2510.07784v1/cpt-ablation-recall.png\" alt=\"Figure 3: CPT消融训练曲线\" style=\"width:60%;\">\n\n*图3：左侧为8天召回率随SFT步数变化，右侧为训练损失。有CPT的模型（CR1, CR2）收敛更快且最终性能更高。*\n\n### 7.4 缩放律结果\n\n- 训练损失与评估损失均服从幂律缩放，更大模型在更少计算量下达到更低损失。\n- 评估Recall@10随计算量持续增长，未见饱和。\n- 固定计算预算下，最优模型尺寸随预算增大而增大（类似Chinchilla定律），但MoE-3B未超越MoE-900M，可能受限于批量大小较小（仅0.57轮数据）。\n\n## 8. 创新点与亮点\n\n1. **整体框架**：首次系统性地将LLM适配到工业级推荐，包含完整的SID生成、CPT和生成式检索SFT。\n2. **SID-v2**：多模态融合、多分辨率码本、渐进掩码与共现对比正则化的组合，显著提升语义ID质量与检索召回。\n3. **CPT有效性证明**：通过在领域数据上的连续预训练，将LLM的通用知识迁移至推荐域，且与LLM初始正交叠加。\n4. **优秀数据效率**：相比LEM，PLUM仅需约1/10的训练样本量，同时提供更广的覆盖与相近或更优的在线指标。\n5. **缩放律研究**：在真实生产环境中验证了生成式检索模型的缩放行为，为模型选型提供指导。\n\n## 9. 局限性与未来工作\n\n- MoE-3B在研究中未达最优，可能受限于批量大小与训练步数不足，暗示需要更完备的缩放分析。\n- 幻觉率虽低（<5%），但在某些冷门或边缘物品上仍会产生无效SID。\n- 当前仅聚焦生成式检索，未来可将PLUM扩展至排序（ranking）、个性化搜索等任务。\n- 解码策略（如多样性束搜索）值得进一步探索。\n- 需要研究SID与自然语言的无缝联合生成。\n\n## 10. 与相关工作的对比\n\n| 工作               | 核心方法          | 与PLUM的关键区别                                   |\n|--------------------|-------------------|---------------------------------------------------|\n| TIGER[23]          | RQ-VAE + seq2seq  | 仅单一模态，无CPT，无LLM初始                      |\n| OneRec[40]         | encoder-decoder + RL | 未利用LLM预训练，CPT与对齐方式不同              |\n| MMQ[30]            | 多模态独立令牌    | PLUM采用拼接+投影，更灵活；PLUM更侧重协同信号   |\n| GRAM[29]           | 混合生成+稠密检索 | PLUM纯生成式，不维护双通道；更强调LLM对齐       |\n| PinFM[4]           | 用户行为序列预训练 | PLUM明确将LLM+CPT用于检索，而非仅序列表示      |\n\n## 11. 评价与启示\n\nPLUM是工业界将LLM成功应用到推荐检索的标杆工作，其核心洞察在于：用紧凑的语义ID替代庞杂的嵌入表，使神经网络成为主导，从而利用LLM的强大序列建模与知识迁移能力。特别值得借鉴的是：\n- **连续预训练（CPT）** 是桥接通用LLM与特定领域的关键步骤，且成本可控。\n- **共现对比正则化** 巧妙地将协同信号注入SID学习，避免频繁重训练。\n- **缩放律实验** 在真实大型系统上进行，为后续工作提供了参考的“Chinchilla式”分析。\n\n然而，PLUM的整体性能高度依赖SID的质量，而SID训练本身需要多模态嵌入与对比数据。对于缺乏此类基础设施的中小型推荐系统，复现成本较高。未来的研究方向包括更通用的SID生成、多任务联合训练以及更深入的解码多样性优化。",
+  "figures": [
+    {
+      "label": "Figure 1",
+      "caption": "Figure 1 . Illustration of our Semantic ID model. It takes two multi-modal video embeddings, encodes them, and compresses the result into a quantized ID using a residual quantizer. This ID is trained to both reconstruct the original inputs and semantically cluster co-occurring videos using a contrastive loss.",
+      "src": "https://arxiv.org/html/2510.07784v1/x1.png"
+    },
+    {
+      "label": "Figure 2",
+      "caption": "Figure 2 . Illustration of Generative Retrieval for next video recommendation. The input prompt is a sequence of interleaved SID tokens, text and custom tokens for numerical features.",
+      "src": "https://arxiv.org/html/2510.07784v1/gen_retrieval.png"
+    },
+    {
+      "label": "Figure 3",
+      "caption": "Figure 3 . 8-th Day Recall@10 and training loss vs retrieval SFT training step.",
+      "src": "https://arxiv.org/html/2510.07784v1/cpt-ablation-recall.png"
+    },
+    {
+      "label": "",
+      "caption": "(a) Iso-FLOPS v.s. training loss.",
+      "src": "https://arxiv.org/html/2510.07784v1/scaling_study_train_loss.png"
+    },
+    {
+      "label": "",
+      "caption": "(b) Iso-FLOPS v.s. eval loss.",
+      "src": "https://arxiv.org/html/2510.07784v1/scaling_study_eval_loss.png"
+    },
+    {
+      "label": "",
+      "caption": "(a) Iso-FLOPS v.s. training Recall@10.",
+      "src": "https://arxiv.org/html/2510.07784v1/scaling_study_train_recall.png"
+    },
+    {
+      "label": "",
+      "caption": "(b) Iso-FLOPS v.s. eval Recall@10.",
+      "src": "https://arxiv.org/html/2510.07784v1/scaling_study_eval_recall.png"
+    },
+    {
+      "label": "",
+      "caption": "(a) Training loss for Fixed Compute Budget.",
+      "src": "https://arxiv.org/html/2510.07784v1/scaling_study_train_loss_budget.png"
+    },
+    {
+      "label": "",
+      "caption": "(b) Eval Recall@10 for Fixed Compute Budget.",
+      "src": "https://arxiv.org/html/2510.07784v1/scaling_study_eval_recall_budget.png"
+    },
+    {
+      "label": "",
+      "caption": "(a) Example 1",
+      "src": "https://arxiv.org/html/2510.07784v1/few-shot-thumbnail.png"
+    },
+    {
+      "label": "",
+      "caption": "(b) Example 2",
+      "src": "https://arxiv.org/html/2510.07784v1/few-shot-thumbnail-1.png"
+    }
+  ],
+  "figures_source": "arxiv_html",
+  "summary_zh": "PLUM提出三阶段框架（SID-v2语义ID生成、连续预训练CPT、生成式检索微调），将预训练LLM（Gemini-1.5 MoE）适配到YouTube工业级推荐，在不使用大规模嵌入表的情况下，在召回率、覆盖率与在线指标上显著超越传统LEM模型。",
+  "authors": "Ruining He, Lukasz Heldt, Lichan Hong, Raghunandan Keshavan, Shifan Mao, Nikhil Mehta, Zhengyang Su, Alicia Tsai, Yueqi Wang, Shao-Chuan Wang, Xinyang Yi, Lexi Baugher, Baykal Cakici, Ed Chi, Cristos Goodrow, Ningren Han, He Ma, Romer Rosales, Abby Van Soest, Devansh Tandon, Su-Lin Wu, Weilong Yang, Yilin Zheng",
+  "org_display": "Google DeepMind, YouTube",
+  "industry_orgs": "Google DeepMind, YouTube",
+  "affiliation_type": "industry",
+  "is_industrial_paper": true,
+  "is_ab_test": true
+}
