@@ -1,0 +1,38 @@
+{
+  "id": "2511.12518",
+  "title": "DualGR: Generative Retrieval with Long and Short-Term Interests Modeling",
+  "model": "deepseek-reasoner",
+  "language": "Chinese",
+  "analyzed_at": "2026-07-08T12:30:25.265506+00:00",
+  "tags": [
+    "Industrial Recommender Systems",
+    "Retrieve"
+  ],
+  "new_tags": [],
+  "markdown": "## 1. 核心问题\n\n论文针对大规模短视频推荐系统中生成式检索（Generative Retrieval, GR）面临的三个挑战：长短期兴趣干扰、上下文噪声与长历史约束、缺乏显式的负反馈信号。在快手双列Explore feed（类似Instagram双列瀑布流）场景下，候选集需同时兼顾多样性、相关性和实时性，传统EBR方法存在多兴趣建模和曝光偏差问题。DualGR通过双分支路由、搜索式SID解码和曝光感知损失有效解决上述问题。\n\n## 2. 相关工作\n\n该节简述EBR（ComiRec, PDN, KuaiFormer）和GR（TIGER）的代表方法，指出GR通过离散语义ID和交叉注意力进行目标感知检索的优势。本文基于TIGER的残差量化编码框架，创新点在于显式区分长短期兴趣并用曝光负样本促进兴趣消退。\n\n## 3. 方法概览\n\nDualGR的整体架构如图1所示。首先使用残差K-Means将视频量化为3级层次语义ID（SID）。训练阶段，模型以无编码器的轻量Transformer解码器为核心，条件化于用户静态特征和动作历史。三大组件：DBR用于选择长/短期历史；S2D在粗粒度桶内搜索细粒度解码；ENTP-Loss利用未点击曝光作为粗粒度困难负样本。\n\n<img src=\"https://arxiv.org/html/x1.png\" alt=\"Figure 1: DualGR框架总览\" style=\"width:60%;\">\n\n该图展示了DualGR在训练和推理时的数据流：左侧编码量化SID，中间DBR分支选择与融合，右侧S2D解码和束搜索。\n\n## 4. 方法细节\n\n### 4.1 双分支长短时路由器（DBR）\n\nDBR定义两个窗口：长窗口$H_t^{\\text{long}}$（长度$L_{\\text{long}}=1000$）和短窗口$H_t^{\\text{short}}$（长度$L_{\\text{short}}=64$）。通过将动作的level-1 SID映射到嵌入并池化得到两个目标感知摘要$\\mathbf{r}_{\\text{long}}$和$\\mathbf{r}_{\\text{short}}$。对训练样本的真实level-1 token $s_\\star^{(1)}$的嵌入$\\mathbf{e}_\\star^{(1)}$，计算余弦相似度$\\gamma_{\\text{long}} = \\cos(\\mathbf{e}_\\star^{(1)}, \\mathbf{r}_{\\text{long}})$和$\\gamma_{\\text{short}}$，通过硬门控选择相似度大的窗口作为历史$H_t^\\star$。推理时，两个分支各运行一次束搜索解码，合并候选集覆盖长期和短期兴趣。\n\n### 4.2 搜索式SID解码（S2D）\n\nS2D针对细粒度解码（level 2/3）。给定粗粒度预测的level-1 token $\\hat{s}^{(1)}$，S2D在原始完整历史$H_t$中搜索所有属于同一桶的动作$\\hat{H}_t(\\hat{s}^{(1)}) = \\text{Search}(\\{a \\in H_t: s^{(1)}(a)=\\hat{s}^{(1)}\\})$。由于每个桶的平均历史长度约为$|H_t|/|\\mathcal{C}^{(1)}|$（$|\\mathcal{C}^{(1)}|=8192$），因此能显著缩小搜索空间，使用更长历史而控制延迟。训练时使用教师强制，条件化于桶内子集进行预测。\n\n### 4.3 曝光感知NTP损失（ENTP-Loss）\n\n将训练样本组织为$(x_i, s_i^{(1:L)}, c_i)$，其中$c_i=0$表示未点击曝光（负样本），$c_i=1$为正样本。损失函数为：\n\n$$\\mathcal{L}_{\\text{ENTP}} = \\frac{1}{|\\mathcal{B}|} \\sum_{i \\in \\mathcal{B}} \\left[ c_i \\sum_{\\ell=1}^{L} (-\\log p_i^{(\\ell)}) + (1-c_i) (-\\alpha \\log(1-p_i^{(1)})) \\right]$$\n\n其中$\\alpha=0.1$控制负信号强度。该损失仅对level-1进行负惩罚，避免细粒度标签噪声。\n\n## 5. 训练与部署优化\n\n模型采用无编码器的轻量前端（嵌入+LayerNorm），解码器为4层Transformer（维度512，8头，前馈1024）。训练时使用教师强制；推理时采用束搜索。S2D通过桶内搜索显著降低计算量，使系统能在严格延迟预算内运行。\n\n## 6. 实验设置\n\n- 场景：快手双列Explore feed，服务超过1亿用户，日均10亿视频曝光。\n- 对比基线：ComiRec、PDN、KuaiFormer（EBR方法）以及TIGER（生成式检索）。\n- 评价指标：在线Hit Rate @100/500/1000。\n- 超参数：$L_{\\text{long}}=1000, L_{\\text{short}}=64, \\alpha=0.1$，桶大小$|\\mathcal{C}^{(\\ell)}|=8192$，束搜索宽度未明确给出但可推测。\n\n## 7. 实验结果\n\n### 7.1 主表结果\n\n| Method   | HR@100  | HR@500  | HR@1000 |\n|----------|---------|---------|---------|\n| ComiRec  | 2.539%  | 6.134%  | 8.249%  |\n| PDN      | 2.343%  | 5.483%  | 7.249%  |\n| KuaiFormer | 4.495% | 7.251% | 12.356% |\n| TIGER    | 4.936%  | 8.184%  | 14.442% |\n| DualGR   | **6.827%** | **10.319%** | **19.529%** |\n\nDualGR在所有K下显著优于基线，HR@1000相比TIGER提升5.1个百分点。\n\n### 7.2 敏感性分析\n\n图2展示了短窗口长度$L_{\\text{short}}$和ENTP-Loss权重$\\alpha$对HR@1000的影响。适中值（$L_{\\text{short}}=64$，$\\alpha=0.1$）取得最佳平衡。\n\n<img src=\"https://arxiv.org/html/x2.png\" alt=\"短窗长度敏感性\" style=\"width:40%;\">\n<img src=\"https://arxiv.org/html/x3.png\" alt=\"Alpha 敏感性\" style=\"width:40%;\">\n\n左图显示$L_{\\text{short}}$从16增至256时HR@1000先升后降；右图显示$\\alpha$太大（1.0）或太小（$1\\times10^{-5}$）均降低性能。\n\n### 7.3 在线A/B测试\n\n在6%流量上运行一周，观察到视频观看量提升+0.527%，观看时长提升+0.432%，端到端延迟无增加。\n\n### 7.4 消融研究\n\n| Variant      | HR@100  | HR@500  | HR@1000 |\n|--------------|---------|---------|---------|\n| w/o DBR      | 5.134%  | 8.892%  | 15.379% |\n| w/o S2D      | 6.257%  | 9.182%  | 16.287% |\n| w/o ENTP-Loss| 6.672%  | 9.837%  | 17.576% |\n| DualGR (full)| **6.827%** | **10.319%** | **19.529%** |\n\n每个组件贡献明显，其中DBR和S2D影响最大。\n\n## 8. 创新点与亮点\n\n1. **显式长短期兴趣分离**：DBR通过硬门控避免注意力稀释，推理时合并双分支，兼顾多时间尺度。\n2. **搜索约束的细粒度解码**：S2D在粗粒度桶内搜索，减少噪声并提升效率，允许使用更长历史。\n3. **曝光负反馈利用**：ENTP-Loss将未点击曝光作为粗粒度困难负样本，促进非兴趣消退，提升候选集多样性和覆盖。\n4. **工业实用性**：在千万级用户场景下取得显著线上提升，且无额外延迟开销。\n\n## 9. 局限性与未来工作\n\n- 当前仅在双列feed验证，单列场景效果待确认。\n- 量化编码使用残差K-Means，未探索更先进的语义ID生成方法（如VQ-VAE）。\n- 超参数$L_{\\text{short}}$和$\\alpha$需要人工调节，未来可研究自适应调整。\n- 未来可将DBR扩展为多分支，覆盖更多时间尺度的兴趣。\n\n## 10. 与相关工作的对比\n\n与TIGER相比，DualGR在训练和推理上增加了兴趣分离和曝光负反馈，实验性能大幅超越。与KuaiFormer等EBR方法相比，DualGR利用生成式检索的交叉注意力优势，并针对性解决了其在实际部署中的痛点。\n\n## 11. 评价与启示\n\n本文为工业级生成式检索提供了一套系统实用的解决方案。其设计思想（显式分支路由、桶内搜索降噪、负反馈利用）具有很强的可迁移性。笔记中应关注DBR的硬门控选择策略和S2D的搜索机制如何协同提高检索质量。对于从事推荐系统检索的工程和研究人员，该工作提供了有价值的参考。",
+  "figures": [
+    {
+      "label": "Figure 1",
+      "caption": "Figure 1 . Overview of the proposed DualGR.",
+      "src": "https://arxiv.org/html/x1.png"
+    },
+    {
+      "label": "",
+      "caption": "(a) Short-term window length.",
+      "src": "https://arxiv.org/html/x2.png"
+    },
+    {
+      "label": "",
+      "caption": "(b) α \\alpha in ENTP-Loss.",
+      "src": "https://arxiv.org/html/x3.png"
+    }
+  ],
+  "figures_source": "arxiv_html",
+  "summary_zh": "DualGR针对生成式检索提出双分支长短时路由器、搜索式SID解码和曝光感知损失，在快手双列feed上实现显著线上提升，验证了工业场景下GR的可行性和有效性。",
+  "authors": "Zhongchao Yi, Kai Feng, Xiaojian Ma, Yalong Wang, Yongqi Liu, Han Li, Zhengyang Zhou, Yang Wang",
+  "org_display": "University of Science and Technology of China, Kuaishou Technology, Suzhou Institute for Advanced Research, University of Science and Technology of China",
+  "industry_orgs": "Kuaishou Technology",
+  "affiliation_type": "collaboration",
+  "is_industrial_paper": true,
+  "is_ab_test": true
+}
