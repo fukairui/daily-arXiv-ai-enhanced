@@ -1,3 +1,9 @@
 {
-  "pending": []
+  "pending": [
+    {
+      "name": "Generative Retrieval",
+      "desc": "将推荐场景下的商品ID离散化为语义ID，并通过自回归生成方式实现检索的方法",
+      "from_id": "2511.12518"
+    }
+  ]
 }
