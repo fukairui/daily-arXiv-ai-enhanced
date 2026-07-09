@@ -1,0 +1,39 @@
+{
+  "id": "2607.04068",
+  "title": "UniSGR: Unified Framework for Semantic ID Generation and Ranking",
+  "model": "deepseek-reasoner",
+  "language": "Chinese",
+  "analyzed_at": "2026-07-09T06:42:40.122189+00:00",
+  "tags": [
+    "Industrial Recommender Systems",
+    "Ranking",
+    "LLM as Rec"
+  ],
+  "new_tags": [],
+  "markdown": "## 1. 核心问题\n\n传统级联推荐系统（召回→粗排→精排→重排）存在目标不一致问题：每阶段独立优化，上游误筛的物品无法被下游恢复；且生成式检索方法（如TIGER、OneRec）仅关注语义相关候选生成，缺乏工业级多目标排序所需的细粒度判别能力。本文提出**UniSGR**，在单一框架内统一语义ID生成与多目标排序，解决端到端生成推荐与排序的联合优化问题。\n\n## 2. 相关工作\n\n### 2.1 DLRM\nWide&Deep、DeepFM、AutoInt、DIN等模型依赖ID类稀疏特征与显式/隐式特征交互，而DLRM与LONGER分别从系统与长序列角度提升效率。\n\n### 2.2 生成式推荐\nTIGER采用RQ-VAE生成语义元组ID；HLLM结合层次LLM建模用户与物品；HSTU利用线性门控聚合提升效率；OneRec/OneRec-Think探索端到端生成与偏好优化。在统一检索与排序方面，OneRanker、GRank、GPR尝试减少目标偏差，但UniSGR直接在生成解码器上叠加多目标排序模块。\n\n## 3. 方法概览\n\n<img src=\"https://arxiv.org/html/2607.04068v1/x1.png\" alt=\"Figure 1: UniSGR整体架构\" style=\"width:70%;\">\n\n*图1展示UniSGR的编解码器框架：轻量级MemoryNet编码器处理用户行为序列，稀疏MoE解码器通过Task-Aware Tokens统一生成式检索与多目标排序。*\n\nUniSGR采用**两阶段训练**：\n1. **多场景预训练**：混合多业务场景数据，通过标准下一个Token预测（NTP）捕捉通用用户兴趣。\n2. **场景特定对齐**：在目标场景上联合优化**Value-Aware Parallel Multi-Token Prediction (VA-PMTP)** 生成任务与统一多目标排序模块，并引入**Task-Aware Tokens (TAT)** 通过**Funnel-Aware Contrastive Learning (FACL)** 对齐生成与排序目标。\n\n推理阶段使用**STARK**（Semantic Tree Attention with Reorganized KV Cache）加速beam search解码。\n\n## 4. 方法细节\n\n### 4.1 数据组织\n- **预训练**：混合多场景用户行为日志，构建下一物品生成样本（用户特征+历史交互序列+目标物品语义ID）。\n- **对齐阶段**：来自目标场景，每个会话包含多种行为（点击、加购、购买）的目标物品，用于VA-PMTP生成与排序模块的联合训练。\n- **服务**：编码器处理用户画像、行为序列与上下文，解码器生成候选物品语义ID，排序模块直接对生成候选打分。\n\n### 4.2 Tokenizer\n先用Qwen3-VL对物品文本+视觉特征进行多模态对比学习（InfoNCE损失，正样本为交互物品，难负样本为曝光未点击物品，易负样本为batch内随机物品），得到协作感知嵌入；再通过RQ-VAE结合Sinkhorn-Knopp平衡分配，离散化为3层语义码本（每层码本大小K=8192）。\n\n### 4.3 模型架构\n- **特征编码器（MemoryNet）**：用户画像经MLP后作为前缀token拼接至行为序列；每个历史物品由其语义ID嵌入、行为类型与位置编码表示，经线性投影得到静态记忆表示`$M$`（复杂度O(L)）。\n- **稀疏MoE解码器**：采用Grouped Query Attention (GQA)降低KV cache成本，并用共享SwiGLU-MoE层替代标准FFN：`$y = \\text{Expert}_{\\text{shared}}(x) + \\sum_{i\\in\\text{TopK}} g_i(x)\\text{Expert}_i(x)$`。使用RMSNorm与QK-Norm稳定训练。Token Type Embedding（TTE）编码语义ID的层次结构。\n\n### 4.4 两阶段训练\n\n#### 4.4.1 多场景预训练\n标准NTP损失：\n$$\\mathcal{L}_{\\text{NTP}} = -\\sum_{j=1}^d \\log P_\\theta(c_{v_{L+1},j} | x_u, S_u, c_{v_{L+1},<j})$$\n\n#### 4.4.2 价值感知并行多Token预测（VA-PMTP）\n在目标场景会话中同时预测多个行为对应的目标物品语义ID，使用并行mask：同一物品内因果mask，不同物品间互不可见，所有物品共享BOS token。引入行为价值权重`$w_\\tau$`（购买>加购>点击>曝光）：\n$$\\mathcal{L}_{\\text{VA-PMTP}} = -\\sum_\\tau \\frac{w_\\tau}{|S_\\tau|}\\sum_{i=1}^{|S_\\tau|}\\sum_{j=1}^d \\log P_\\theta(c_{v_{L+i},j} | \\cdots)$$\n\n#### 4.4.3 统一多目标排序模块\n复用生成解码器的语义ID表示、编码器表示与解码器状态（Decoder Representation Sharing, DRS）。架构包括：\n- **Target Attention**：用候选语义ID对用户行为序列做交叉注意力。\n- **PLE多目标排序**：以用户信息、语义ID表示、Target Attention输出与解码器表示为底层输入，进行点击/加购/购买的多目标预测。\n\n#### 4.4.4 任务感知Token（TAT）\n在BOS前插入三个可学习向量`$e_{\\text{click}}, e_{\\text{atc}}, e_{\\text{pay}}$`，按点击→加购→购买漏斗顺序排列，采用统一因果mask（所有语义ID可attend到所有task token）。TAT不增加自回归步数。\n\n#### 4.4.5 漏斗感知对比学习（FACL）\n对每个task token的输出`$h_\\tau$`进行对比学习：正样本为对应行为的物品，负样本随漏斗变难（点击：随机负例；加购：点击未加购；购买：点击未购买）。辅助损失：\n$$\\mathcal{L}_{\\text{aux}} = \\beta \\cdot (\\mathcal{L}_{\\text{click}}^{\\text{aux}} + \\mathcal{L}_{\\text{atc}}^{\\text{aux}} + \\mathcal{L}_{\\text{pay}}^{\\text{aux}})$$\n\n最终联合训练目标：\n$$\\mathcal{L} = \\mathcal{L}_{\\text{gen}} + \\alpha \\cdot \\mathcal{L}_{\\text{rank}} + \\mathcal{L}_{\\text{aux}}$$\n\n### 4.5 STARK推理加速\n<img src=\"https://arxiv.org/html/2607.04068v1/x2.png\" alt=\"Figure 2: STARK推理机制\" style=\"width:70%;\">\n\n*图2对比传统beam search与STARK：STARK将候选扩展从batch维转为序列维，通过预计算树注意mask消除冗余前缀计算与KV cache重复拷贝。*\n\n传统beam search在每层将top-K候选沿batch维复制，导致KV cache重复与计算冗余。STARK将候选token沿序列维拼接，使用树注意力mask控制可见性（每个token只能attend其祖先与自身），共享前缀仅计算一次。KV cache按树拓扑组织，前缀只存储一次，后代节点通过索引映射引用。STARK在工业场景下吞吐量提升200%（详见表1）。\n\n## 5. 实验设置\n\n### 5.1 数据集\nLazada首页“Guess You Like”场景的大规模电商日志。多场景预训练混合多个业务场景，场景对齐使用目标场景带行为标签的数据。因保密原因隐去具体规模。\n\n### 5.2 基线\nTIGER、OneRec、OneRec-V2等语义ID生成式推荐模型。所有方法使用相同Tokenizer与硬件。\n\n### 5.3 评估指标\n- 检索：HR@K（点击HR，加购HR，购买HR）。\n- 排序：AUC与GAUC（点击/加购/购买）。\n- 在线：IPV、交易笔数、GMV绝对增量。\n\n### 5.4 实现细节\n嵌入维度128，GQA（每4个query头共享1个key/value头），稀疏MoE每token激活约7%参数。推理时beam width设为(512,512,1024)（三层码本）。\n\n## 6. 实验结果\n\n### 6.1 离线检索对比\nTable 2: UniSGR-M（0.8B）超越所有基线，HR@100=0.2195，HR@500=0.3913。\n| Model | HR@50 | HR@100 | HR@200 | HR@500 |\n|-------|-------|--------|--------|--------|\n| TIGER | 0.1445 | 0.2026 | 0.2698 | 0.3675 |\n| OneRec-V2 | 0.1529 | 0.2126 | 0.2816 | 0.3812 |\n| OneRec | 0.1538 | 0.2151 | 0.2855 | 0.3866 |\n| UniSGR-M | **0.1579** | **0.2195** | **0.2896** | **0.3913** |\n\n### 6.2 两阶段训练收益\nTable 3: 仅预训练 vs 仅场景对齐 vs 两阶段，两阶段在Clk-HR@100提升至0.2842（仅预训练0.1886，仅对齐0.2297），Pay-HR@100达0.3408。\n\n### 6.3 消融实验\n- **码本大小**：K从2048→8192，HR@100从0.2917→0.3266，碰撞率从45%降至24.03%；K=10240收益递减。\n- **模型变体**：去除MoE导致HR@100从0.2195降至0.1725；去除SwiGLU降至0.2119。\n- **缩放定律**：从0.2B到2.0B，HR@100从0.1911增至0.2311，符合幂律拟合（图3）。\n\n<img src=\"https://arxiv.org/html/2607.04068v1/x3.png\" alt=\"Figure 3: 缩放行为\" style=\"width:60%;\">\n\n*图3显示HR@100与HR@500随训练计算量（GFLOPs）的增长呈幂律关系（R²>0.999），表明UniSGR具有良好的可扩展性。*\n\n- **对齐组件贡献**（Table 7, 8）：\n  - VA-PMTP相比NTP显著提升Atc-HR与Pay-HR；\n  - 加入排序模块后检索与排序指标均提升；\n  - TAT进一步改善生成与排序的一致性；\n  - FACL（Full UniSGR）在排序指标（GAUC/AUC）上取得最佳。\n\n### 6.4 在线A/B测试\nTable 9: UniSGR相比生产级联baseline提升IPV+3.36%、交易笔数+2.17%、GMV+5.68%。\n\n## 7. 创新点与亮点\n\n1. **统一生成与排序框架**：在生成解码器上直接附着多目标排序模块，使排序梯度反向传播影响生成表示，实现真正端到端联合优化。\n2. **两阶段训练范式**：多场景预训练+场景特定对齐，借鉴大模型的预训练-微调范式，有效利用跨场景数据并保留场景专化能力。\n3. **Task-Aware Tokens**：可学习的任务token注入目标信号，配合漏斗对比学习，引导生成表示向高价值行为对齐。\n4. **STARK推理策略**：将beam search扩展从batch维转为序列维，消除KV cache重复与前缀计算冗余，工业场景吞吐提升200%。\n5. **缩放定律验证**：在0.2B~2.0B范围内验证性能随计算量幂律增长，为更大规模部署提供依据。\n\n## 8. 局限性与未来工作\n\n- 当前仅验证了最大2.0B模型，更极大规模下的行为尚未探索。\n- STARK虽然加速推理，但树注意mask的构建对GPU显存管理仍有优化空间。\n- 本文的对比学习负采样策略较为简单，可引入更复杂的难负样本挖掘机制。\n- 方法依赖预训练的多模态编码器（Qwen3-VL），领域迁移时可能需要重新微调编码器。\n\n## 9. 与相关工作的对比\n\n| 维度 | TIGER | OneRec | UniSGR |\n|------|-------|--------|--------|\n| 语义ID生成 | 仅生成 | 生成+偏好对齐 | 生成+多目标排序 |\n| 排序能力 | 无 | 检索后接独立排序 | 统一模型内排序 |\n| 多场景预训练 | 单场景 | 单场景 | 多场景预训练+场景对齐 |\n| 推理加速 | 标准beam search | 标准beam search | STARK树注意力 |\n| 多目标优化 | 单目标（点击） | 单目标 | 价值感知多目标 |\n\nUniSGR在统一性、工业实用性上显著优于先前工作。\n\n## 10. 评价与启示\n\nUniSGR是生成式推荐走向工业部署的重要一步。其核心价值在于：**将生成与排序合成一个可端到端训练的模型，避免级联目标偏差**。STARK的设计证明了通过重新组织注意力计算可以大幅缓解生成式检索的推理瓶颈；两阶段训练则展示了大规模跨场景数据在推荐中的预训练潜力。该方法在线指标（GMV+5.68%）的显著提升说明其实际商业价值。值得注意的是，模型容量从0.2B增长到2.0B时收益递减，提示工业部署中需权衡计算成本与增益。未来的发展方向可包括多模态增强、更长序列建模以及更高效的自适应推理策略。",
+  "figures": [
+    {
+      "label": "Figure 1",
+      "caption": "Figure 1. The overall architecture of UniSGR. It features a lightweight feature encoder for multimodal user behavior sequences and a sparse MoE decoder that unifies generative retrieval and multi-objective ranking using Task-Aware Tokens.",
+      "src": "https://arxiv.org/html/2607.04068v1/x1.png"
+    },
+    {
+      "label": "Figure 2",
+      "caption": "Figure 2. STARK inference mechanism. It uses a sequence-dimension tree attention mask to eliminate redundant prefix computations and data copying.",
+      "src": "https://arxiv.org/html/2607.04068v1/x2.png"
+    },
+    {
+      "label": "Figure 3",
+      "caption": "Figure 3. Scaling behavior of UniSGR across model sizes.",
+      "src": "https://arxiv.org/html/2607.04068v1/x3.png"
+    }
+  ],
+  "figures_source": "arxiv_html",
+  "summary_zh": "UniSGR通过两阶段训练（多场景预训练+场景特定对齐）将语义ID生成与多目标排序统一在单个Transformer编解码器框架内，并设计STARK推理加速方案，在真实电商平台离线与在线实验中均取得显著提升。",
+  "authors": "Jiawei Sun, Jun Yang, Ziyue Guo, Dongyue Xu, Jianan Yan, Lifang Deng, Xiaoyi Zeng",
+  "org_display": "Alibaba International Digital Commerce Group",
+  "industry_orgs": "Alibaba International Digital Commerce Group",
+  "affiliation_type": "industry",
+  "is_industrial_paper": true,
+  "is_ab_test": true
+}
