@@ -1,0 +1,59 @@
+{
+  "id": "2607.24617",
+  "title": "LaRec: Unleashing LLM-based Latent Reasoning for Generative Recommendation",
+  "model": "deepseek-reasoner",
+  "language": "Chinese",
+  "analyzed_at": "2026-07-30T06:05:04.690121+00:00",
+  "tags": [
+    "LLM as Rec",
+    "Reasoning",
+    "Industrial Recommender Systems"
+  ],
+  "new_tags": [],
+  "markdown": "## 1. 核心问题\n\n论文针对将大型语言模型（LLM）应用于推荐系统时，显式思维链（Explicit CoT）推理虽然效果好但推理时延过高的问题，探索潜在推理（Latent Reasoning）路径。然而，直接将潜在推理引入推荐系统面临两个核心挑战：\n\n1. **缺乏细粒度监督**：潜在推理仅在连续隐空间中进行，优化仅依赖最终推荐目标信号的稀疏反馈，无法有效指导中间隐藏状态的学习，导致推理退化。\n2. **确定性推理路径局限**：当前潜在推理模型通常建模为确定性映射，只能执行单一推理轨迹，无法像显式CoT那样通过采样探索用户多样化的兴趣，且简单注入高斯噪声会导致语义空间坍塌及搜索空间过大难以收敛。\n\n## 2. 相关工作\n\n论文将相关工作分为两类：生成式推荐（Generative Recommendation）和推理增强推荐（Reasoning-Enhanced Recommendation）。生成式推荐方面，TIGER、OneRec系列、LC-Rec 等利用 LLM 的语义理解能力进行序列到序列的推荐。推理增强推荐则分为“Reason-then-Apply”（如 TrackRec 用 LLM 生成辅助信息）和“Reason-then-Recommend”（如 OneRec-Think 进行显式偏好分析后再推荐）。潜在推理方面，ReaRec、LARES、LatentR3 等已初步探索，但缺乏细粒度监督，未能充分释放 LLM 的潜在推理潜力。\n\n## 3. 方法概览\n\nLaRec 遵循“预训练+RL对齐”的范式，由两个核心阶段构成：\n\n1. **潜在预训练（Latent Pre-training, LPT）**：通过步骤级对齐（Step-level Alignment）和过程方向对齐（Process Direction Alignment）为潜在推理状态提供丰富的监督信号。\n2. **个性化RL调优（Personalized RL-tuning, PRL）**：为每个用户构建基于历史兴趣的高斯混合分布（Gaussian Mixture Distribution），随机采样推理起点，引导 LLM 在隐空间中遍历多样化推理路径，并通过 GRPO 算法进行强化对齐。\n\n整体框架如图 2 所示：\n\n<img src=\"https://arxiv.org/html/2607.24617v1/x2.png\" alt=\"Figure 2: LaRec框架总览\" style=\"width:60%;\">\n\n*图 2 展示了 LaRec 的两阶段结构：左侧为潜在预训练阶段，右侧为个性化 RL 调优阶段。*\n\n## 4. 方法细节\n\n### 4.1 问题形式化\n\n对于用户 $u$ 的历史交互序列 $S_u = \\{i_1, i_2, \\dots, i_t\\}$，目标是学习函数 $f_\\theta$ 预测下一项 $i_{t+1}$。LaRec 在隐空间中生成 $K$ 个潜在状态 $Z = \\{\\mathbf{z}_1, \\mathbf{z}_2, \\dots, \\mathbf{z}_K\\}$，最终预测基于最后一个状态 $\\mathbf{z}_K$：\n\n$$\nP(i_{t+1}|S_u) = P(i_{t+1}|\\mathbf{z}_K) \\prod_{k=1}^K P(\\mathbf{z}_k|\\mathbf{z}_{<k},S_u)\n$$\n\n标准优化目标为最大化 $\\log P(i_{t+1}|S_u, \\mathbf{z}_{1:K})$，对应交叉熵损失 $\\mathcal{L}_{Rec}$。\n\n### 4.2 潜在预训练（LPT）\n\n#### 4.2.1 步骤级对齐（Step-level Alignment）\n\n利用一个强大的推理模型（如 Qwen-72B）对每个训练实例 $(S_u, i_{tgt})$ 生成显式 CoT 推理路径 $C^+ = \\{c_1, c_2, \\dots, c_K\\}$，并提取每个步骤的隐藏状态 $\\mathbf{h}_k$。然后通过 InfoNCE 对比损失约束潜在状态 $\\mathbf{z}_k$ 与对应显式状态 $\\mathbf{h}_k$ 的语义一致性：\n\n$$\n\\mathcal{L}_{SA} = \\sum_{i=1}^B \\sum_{k=1}^K -\\log \\frac{\\exp(\\operatorname{sim}(\\mathbf{z}_{i,k}, \\mathbf{h}_{i,k})/\\tau_1)}{\\sum_{j=1}^B \\exp(\\operatorname{sim}(\\mathbf{z}_{i,k}, \\mathbf{h}_{j,k})/\\tau_1)}\n$$\n\n其中 $\\operatorname{sim}$ 为余弦相似度，$\\tau_1$ 为温度系数。\n\n#### 4.2.2 过程方向对齐（Process Direction Alignment）\n\n确保推理步骤的方向逐步指向目标物品。目标物品语义向量 $\\mathbf{e}_{tgt}$ 由其标题嵌入的平均池化得到。定义第 $k+1$ 步的更新向量 $\\mathbf{v}_{k+1} = \\mathbf{z}_{k+1} - \\mathbf{z}_k$，并约束其与理想方向（$\\frac{1}{K-1}\\mathbf{e}_{tgt}$）的一致性：\n\n$$\n\\mathcal{L}_{PA} = \\sum_{k=2}^K \\max\\left(0, 1 - \\operatorname{sim}\\left(\\mathbf{v}_k, \\frac{1}{K-1}\\mathbf{e}_{tgt}\\right)\\right)\n$$\n\n#### 4.2.3 总体目标\n\n$$\n\\mathcal{L}_{LPT} = \\mathcal{L}_{Rec} + \\alpha \\mathcal{L}_{SA} + \\gamma \\mathcal{L}_{PA}\n$$\n\n### 4.3 个性化RL调优（PRL）\n\n#### 4.3.1 个性化引导分布构建\n\n利用用户历史交互物品的嵌入构建“兴趣锚点集合” $\\Omega_u = \\{\\mathbf{e}_t | i_t \\in S_u\\}$，并建模为均匀高斯混合分布：\n\n$$\n\\mathbf{H}_0 \\sim P_{\\text{guide}}(u) = \\frac{1}{|\\Omega_u|} \\sum_{\\mathbf{e} \\in \\Omega_u} \\mathcal{N}(\\mathbf{e}, \\sigma^2 \\mathbf{I})\n$$\n\n#### 4.3.2 强化对齐\n\n在每个训练样本中，从 $P_{\\text{guide}}(u)$ 独立采样 $n$ 次，为初始潜在状态注入扰动 $\\mathbf{z}_1^i = \\mathbf{z}_1 + \\mathbf{H}_0^i$，得到 $n$ 条并行推理路径及预测结果 $\\{O_i\\}$。复合奖励函数包含稀疏命中奖励和稠密集语义相似度奖励：\n\n$$\nr(O_i) = \\mathbb{I}(O_i = i_{tgt}) + \\lambda \\cdot \\operatorname{sim}(\\operatorname{Emb}(O_i), \\operatorname{Emb}(i_{tgt}))\n$$\n\n采用 GRPO 算法进行优化，计算每条路径在组内的优势 $A_i = (r_i - \\mu)/\\sigma$，目标函数为：\n\n$$\nJ_{GRPO}(\\theta) = \\mathbb{E}_{\\{O_i\\} \\sim LLM_{\\theta_{\\text{old}}}(O_i|\\mathbf{z}^i_{1:K}, S_u)} \\left[ \\frac{1}{n} \\sum_{i=1}^n \\left( \\rho_i - \\beta D_{KL}(LLM_\\theta \\| LLM_{\\text{ref}}) \\right) \\right]\n$$\n\n其中 $\\rho_i = \\min\\left( \\delta_i A_i, \\operatorname{clip}(\\delta_i, 1-\\epsilon, 1+\\epsilon) A_i \\right)$，$\\delta_i = \\frac{LLM_\\theta(O_i|\\cdot)}{LLM_{\\theta_{\\text{old}}}(O_i|\\cdot)}$。\n\n## 5. 训练与部署优化\n\n论文在 8 块 NVIDIA H20 GPU 上训练，使用 Qwen2.5-1.5B 作为基础模型。潜在预训练阶段采用 AdamW 优化器，学习率在 $\\{3e-4, 5e-5, 1e-5\\}$ 中搜索，早停策略 patience=1。潜在推理步数 $K=6$，对齐权重 $\\alpha=\\gamma=1.0$。RL 阶段探索半径 $\\sigma=1.5$，$\\lambda=1.0$，学习率在 $\\{1e-5, 1e-4, 5e-4\\}$ 中搜索。\n\n推理效率上，LaRec 使用潜在推理（6 步）的延迟与无推理方法相当（每样本约 0.2-0.7 秒），而显式 CoT 则需数秒，体现了显著的效率优势。\n\n## 6. 实验设置\n\n### 6.1 数据集\n\n使用 Amazon 的两个子集（Toys, Instruments）、MovieLens-100K 和一个工业离线数据集。均经过 5-core 过滤和时间戳切分（8:1:1）。用户交互序列最大长度设为 10。\n\n### 6.2 基线\n\n- ID 类：GRU4Rec, SASRec, BERT4Rec, ReaRec, PLR\n- LLM 类：TallRec, BIGRec, $D^3$, TrackRec, LatentR3\n\n### 6.3 评估指标\n\nRecall 类指标 HR@N 和 NDCG@N，N=5,10。\n\n## 7. 实验结果\n\n### 7.1 总体性能\n\nLaRec 在所有四个数据集上全面超越所有基线。例如在 Instruments 数据集上，LaRec 的 H@10 达到 0.1238，相对最优基线 LatentR3（0.1208）提升约 2.5%；在 Industry 数据集上，H@10 达到 0.4090，相对 LatentR3（0.4020）提升约 1.7%。\n\n| Methods | Toys H@10 | Instruments H@10 | Movie H@10 | Industry H@10 |\n|---------|-----------|-----------------|------------|---------------|\n| SASRec  | 0.0884   | 0.0850          | 0.1849     | 0.2914        |\n| LatentR3| 0.1055   | 0.1208          | 0.2175     | 0.4020        |\n| **LaRec** | **0.1073** | **0.1238** | **0.2256** | **0.4090** |\n\n### 7.2 消融实验\n\n表 3 展示了消融结果。逐步移除 LPT 和 PRL 组件均导致性能下降。其中步骤级对齐（SA）和过程方向对齐（PA）两者缺一不可，移除 PRL 中的个性化引导分布（PGD）改用标准高斯噪声后指标显著降低，证实了“锚定探索”策略的有效性。\n\n<img src=\"https://arxiv.org/html/2607.24617v1/x4.png\" alt=\"表3: 消融实验结果\" style=\"width:80%;\">\n\n*表 3 显示了各组件对最终性能的贡献，验证了步骤级对齐和过程方向对齐的互补作用。*\n\n### 7.3 推理长度影响\n\n推理步数 $K$ 从 0 增加到 8，性能先升后降，最优为 $K=6$（与显式 CoT 步数一致）。过少的步数无法充分传递语义逻辑，过多则导致“过度思考”。\n\n### 7.4 缩放定律\n\n使用 Qwen2.5 系列不同参数规模（0.5B, 1.5B, 3B, 7B）验证，LaRec 性能随模型规模增大而持续提升，表明潜在推理同样符合 LLM 的缩放定律。\n\n### 7.5 超参数敏感性\n\n对齐系数 $\\alpha$ 和 $\\gamma$ 在不同数据集上最优值在 0.8-1.0 附近；探索半径 $\\sigma=1.5$ 效果最佳。\n\n### 7.6 线上 A/B 测试\n\n在某真实广告平台作为额外的 LLM Recall 通道，对比线上系统（含多个 ID 和文本召回通道），LaRec 在曝光量、成本、转化率三项指标上分别提升 +0.46%、+1.39%、+2.93%。\n\n## 8. 创新点与亮点\n\n1. **两阶段潜在推理框架**：提出“潜在预训练+个性化 RL 调优”范式，系统性地解决了潜在推理在推荐中的稀疏监督和确定性路径问题。\n2. **步骤级对齐**：将显式 CoT 的知识通过对比学习蒸馏到潜在状态，提供细粒度指导。\n3. **过程方向对齐**：通过目标物品方向约束引导推理序列逐步逼近真实偏好。\n4. **个性化引导分布**：基于用户历史兴趣构建高斯混合分布，实现“锚定探索”，避免随机噪声导致的推理坍塌。\n5. **效率与效果平衡**：潜在推理在保持与无推理方法相近延迟的同时，性能显著优于显式 CoT 方法。\n\n## 9. 局限性与未来工作\n\n- 潜在推理步数 $K$ 需要人工设定，且最优值依赖于显式 CoT 中的步数分布，缺乏自适应调节机制。\n- 奖励函数设计仍然依赖语义相似度，可能受 LLM 嵌入质量影响。\n- 线上验证仅在广告召回场景，未见在排序或多任务场景的全面部署。\n- 可考虑将步数作为可学习参数或通过搜索动态调整。\n\n## 10. 与相关工作的对比\n\n与 ReaRec、LARES、LatentR3 等潜在推理工作相比，LaRec 首次引入显式 CoT 蒸馏和个性化引导分布，而不是简单增加参数密度或注入随机噪声。与 OneRec-Think 等显式推理方法相比，LaRec 在推理延迟上具有数量级优势。TIGER 等生成式推荐缺乏推理能力，LaRec 则集成了多步推理。\n\n## 11. 评价与启示\n\n该论文系统地设计了潜在推理在推荐中的训练范式，技术贡献扎实。特别是“步骤级对齐 + 过程方向对齐”的设计弥补了潜在推理监督信号不足的问题，而“个性化引导分布 + GRPO”则为打破确定性路径提供了高效探索方案。实验部分涵盖公开数据集和线上 A/B 测试，说服力较强。未来工作可关注推理步数的自适应选择和更泛化的奖励建模。",
+  "figures": [
+    {
+      "label": "Figure 1",
+      "caption": "Figure 1 . Left: Explicit Reason for Recommendation; Right: Latent Reason for Recommendation.",
+      "src": "https://arxiv.org/html/2607.24617v1/x1.png"
+    },
+    {
+      "label": "Figure 2",
+      "caption": "Figure 2 . An overview of L ​ a ​ R ​ e ​ c LaRec . It mainly consists of two core stages: Latent Pre-Training and Personalized RL-tuning.",
+      "src": "https://arxiv.org/html/2607.24617v1/x2.png"
+    },
+    {
+      "label": "Figure 3",
+      "caption": "Figure 3 . Preference Reasoning Prompt: Example prompt and response.",
+      "src": "https://arxiv.org/html/2607.24617v1/x3.png"
+    },
+    {
+      "label": "Table 3",
+      "caption": "Table 3 . Ablation study of L ​ a ​ R ​ e ​ c LaRec across four datasets (H@10 and N@10).",
+      "src": "https://arxiv.org/html/2607.24617v1/x4.png"
+    },
+    {
+      "label": "Figure 5",
+      "caption": "Figure 5 . Impact of Reasoning Length.",
+      "src": "https://arxiv.org/html/2607.24617v1/x5.png"
+    },
+    {
+      "label": "Figure 6",
+      "caption": "Figure 6 . Impact of LLM Scaling Laws.",
+      "src": "https://arxiv.org/html/2607.24617v1/x6.png"
+    },
+    {
+      "label": "Figure 7",
+      "caption": "Figure 7 . Impact of different alignment coefficients α \\alpha , γ \\gamma and σ \\sigma .",
+      "src": "https://arxiv.org/html/2607.24617v1/x7.png"
+    }
+  ],
+  "figures_source": "arxiv_html",
+  "summary_zh": "LaRec 提出两阶段潜在推理框架（潜在预训练+个性化RL调优），通过显式CoT蒸馏和用户个性化引导分布，在保持低推理延迟的同时显著提升生成式推荐性能，并在公开数据集和工业A/B测试中取得一致改进。",
+  "authors": "Yu Xia, Zihan Lin, Wei Yang, Rui Zhong, Cheng Chen, Huan Ren, Yao Hu",
+  "org_display": "University of Chinese Academy of Sciences, Xiaohongshu",
+  "industry_orgs": "Xiaohongshu",
+  "affiliation_type": "collaboration",
+  "is_industrial_paper": true,
+  "is_ab_test": true
+}
